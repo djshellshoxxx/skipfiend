@@ -991,6 +991,39 @@ int main()
             }
         }
 
+        // Stereo sidechain detection must inspect both channels.
+        {
+            juce::AudioProcessor::BusesLayout withStereoSc;
+            withStereoSc.inputBuses.add (Set::stereo());
+            withStereoSc.inputBuses.add (Set::stereo());
+            withStereoSc.outputBuses.add (Set::stereo());
+
+            const bool applied = p->setBusesLayout (withStereoSc);
+            check (applied, "stereo + stereo sidechain layout can be applied");
+
+            if (applied)
+            {
+                p->prepareToPlay (48000.0, 512);
+                p->resetAllToDefaults();
+                p->apvts.getParameter ("scTrigger")->setValueNotifyingHost (1.0f);
+                if (auto* th = p->apvts.getParameter ("scThresh"))
+                    th->setValueNotifyingHost (th->convertTo0to1 (-50.0f));
+                p->setManualTrigger (true);
+                p->lastEngineFired.store (-1);
+
+                juce::AudioBuffer<float> scBuffer (4, 512);
+                scBuffer.clear();
+                scBuffer.setSample (3, 80, 1.0f); // right sidechain channel only
+                juce::MidiBuffer midi;
+                p->processBlock (scBuffer, midi);
+
+                check (p->lastEngineFired.load() >= 0,
+                       "right-only stereo sidechain transient fires an engine");
+                p->setManualTrigger (false);
+                p->resetAllToDefaults();
+            }
+        }
+
         // Actually negotiate mono and run it - the layout least likely to have
         // been exercised by hand.
         {
