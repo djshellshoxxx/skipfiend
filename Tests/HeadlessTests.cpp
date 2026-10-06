@@ -384,6 +384,33 @@ int main()
         p->setManualTrigger (false);
     }
 
+    // ---- 5b. bypass must not leave MIDI performance state stuck ------------
+    std::cout << "[5b] bypass MIDI state" << std::endl;
+    {
+        p->resetAllToDefaults();
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer midi;
+
+        fillNoise (buf, r);
+        midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        p->processBlock (buf, midi);
+        check (p->isGateOpen(), "MIDI note opens gate before bypass");
+
+        p->apvts.getParameter ("bypass")->setValueNotifyingHost (1.0f);
+        fillNoise (buf, r);
+        midi.clear();
+        midi.addEvent (juce::MidiMessage::noteOff (1, 60), 0);
+        p->processBlock (buf, midi);
+        check (! p->isGateOpen(), "bypass clears held MIDI performance state");
+
+        p->apvts.getParameter ("bypass")->setValueNotifyingHost (0.0f);
+        fillNoise (buf, r);
+        midi.clear();
+        p->processBlock (buf, midi);
+        check (! p->isGateOpen(), "unbypass does not resurrect a released MIDI key");
+        check (bufferIsSane (buf), "audio remains sane after bypass MIDI release");
+    }
+
     // ---- 6. polyphony: stacked held keys -----------------------------------
     std::cout << "[6] polyphony" << std::endl;
     {
