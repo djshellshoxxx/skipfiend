@@ -659,6 +659,21 @@ int main()
             check (runBlocks (*p, 6, 512, r, 60), "full state after truncated ones");
         }
 
+        // structurally valid state with hostile sequencer values
+        {
+            p->seqEngine[0].store (999);
+            p->seqRepeats[0].store (999999);
+            juce::MemoryBlock hostile;
+            p->getStateInformation (hostile);
+            p->seqEngine[0].store (-1);
+            p->seqRepeats[0].store (8);
+            p->setStateInformation (hostile.getData(), (int) hostile.getSize());
+            check (p->seqEngine[0].load() >= -1 && p->seqEngine[0].load() < skf::NUM_ENGINES,
+                   "state load clamps sequencer engine IDs");
+            check (p->seqRepeats[0].load() >= 1 && p->seqRepeats[0].load() <= 128,
+                   "state load clamps sequencer repeat counts");
+        }
+
         // zero-length state
         p->setStateInformation (nullptr, 0);
         check (runBlocks (*p, 6, 512, r, 60), "empty state");
