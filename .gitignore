@@ -1,0 +1,4 @@
+build/
+*.vst3
+*.exe
+.DS_Store
