@@ -259,6 +259,9 @@ void SkipfiendAudioProcessor::applyLiveParamsToVoice (skf::RepeatVoice& v, float
         v.p.playMode      = (int) cachedParam (P::playMode);
         v.p.motion        = cachedParam (P::motion);
         v.p.wet           = cachedParam (P::amt (v.engine()).toRawUTF8());
+
+        if (v.engine() == skf::RECSKIP)
+            skf::enforceRecordSkipVerbatim (v.p);
     }
 
     // CHAOS keeps working while you hold: every so often it re-rolls the
@@ -384,16 +387,8 @@ void SkipfiendAudioProcessor::configureEngine (int e, skf::RepeatParams& rp, dou
             // "record skip": a clean loop, no mangling -- one grid unit of audio
             // repeated verbatim, which is what a needle riding a locked groove does
             rp.sliceMinS = rp.sliceMaxS = juce::jlimit (0.02, 4.0, gridSamples / sr);
-            rp.lenMode   = 0;
-            rp.pitchMode = 0;
-            rp.pitchPerRep = 0.0;
-            rp.volEnv    = 0;
-            rp.panWalk   = 0;
-            rp.timewarp  = 0.0;
-            rp.flavor    = 0;
-            rp.endMode   = 0;
-            rp.playMode  = 0;
-            rp.motion    = 0.0;
+            rp.endMode = 0;
+            skf::enforceRecordSkipVerbatim (rp);
             break;
 
         case skf::GATESTUT:
