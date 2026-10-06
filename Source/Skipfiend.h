@@ -165,6 +165,8 @@ struct RepeatParams
     int    volEnv        = 0;   // 0 flat 1 decay 2 swell 3 tremolo 4 ducked
     int    panWalk       = 0;   // 0 static 1 alt 2 random 3 widen
     int    endMode       = 0;   // 0 hardcut 1 tail-out 2 glitch-click 3 seek-noise 4 silence-resume
+    int    playMode      = 0;   // 0 classic 1 stutter-edit 2 ping-pong 3 scatter 4 orbit 5 evolve
+    double motion        = 0.65; // 0..1 intensity of the selected playback choreography
     double timewarp      = 0.0; // -1..1  >0 accelerate burst, <0 decelerate
     double wet           = 1.0;
     double driftMsPerRep = 0.0; // STICK drift
@@ -189,6 +191,7 @@ struct RepeatVoice
         burstsPlayed = 0;
         curLen = sliceLenFor (0);
         wowPhase = 0.0;
+        scatterOffset = 0.0;
         endedThisPass = false;
     }
 
@@ -268,6 +271,13 @@ struct RepeatVoice
             case 3: pan = juce::jlimit (-1.0, 1.0, (double) i / juce::jmax (1, p.repeats - 1) * 2.0 - 1.0); break;
             default: pan = 0.0; break;
         }
+
+        const double depth = juce::jlimit (0.0, 1.0, p.motion);
+        if (p.playMode == 1)
+            pan = juce::jlimit (-1.0, 1.0, pan + ((i & 1) ? 0.55 : -0.55) * depth);
+        else if (p.playMode == 4 || p.playMode == 5)
+            pan = juce::jlimit (-1.0, 1.0, pan + std::sin ((double) i * 1.35) * 0.85 * depth);
+
         const double a = (pan * 0.5 + 0.5) * juce::MathConstants<double>::halfPi;
         gl = (float) std::cos (a);
         gr = (float) std::sin (a);
@@ -311,8 +321,54 @@ struct RepeatVoice
         }
 
         const int i = rIndex;
-        const double rate = pitchRatioFor (i) * timewarpRate (i);
-        const double rd   = (double) sliceStartAbs + pos;
+        const double depth = juce::jlimit (0.0, 1.0, p.motion);
+        double direction = 1.0;
+        double localPos = pos;
+        double phraseOffset = 0.0;
+        double choreographyRate = 1.0;
+
+        // Playback personalities sit above the individual glitch engines. The
+        // classic mode is bit-for-bit compatible with the old one-direction
+        // loop; the other modes introduce repeat-to-repeat movement instead of
+        // merely throwing more random values at the same gesture.
+        switch (p.playMode)
+        {
+            case 1: // STUTTER EDIT: an 8-step phrase of flips, skips and speed accents
+            {
+                const int step = i & 7;
+                if (step == 2 || step == 5) direction = -1.0;
+                phraseOffset = ((step == 3) ? 0.55 : (step == 6) ? -0.35 : 0.0) * curLen * depth;
+                choreographyRate = 1.0 + ((step == 1 || step == 6) ? 0.75 * depth
+                                          : (step == 4) ? -0.35 * depth : 0.0);
+                break;
+            }
+            case 2: // PING-PONG: alternate playback direction every repeat
+                direction = (i & 1) ? -1.0 : 1.0;
+                break;
+            case 3: // SCATTER: each repeat reads a different nearby fragment
+                phraseOffset = scatterOffset;
+                break;
+            case 4: // ORBIT: smooth speed breathing; stereo orbit is applied in panFor()
+                choreographyRate = 1.0 + std::sin (((double) i + pos / juce::jmax (1.0, curLen))
+                                      * juce::MathConstants<double>::halfPi) * 0.45 * depth;
+                break;
+            case 5: // EVOLVE: controlled combination of direction, offsets and rate movement
+            {
+                const int step = i % 6;
+                direction = (step == 2 || step == 5) ? -1.0 : 1.0;
+                phraseOffset = ((double) step - 2.5) * curLen * 0.14 * depth;
+                choreographyRate = 1.0 + std::sin ((double) step * 1.7) * 0.55 * depth;
+                break;
+            }
+            default: break;
+        }
+
+        if (direction < 0.0)
+            localPos = juce::jmax (0.0, curLen - 1.0 - pos);
+
+        const double rate = pitchRatioFor (i) * timewarpRate (i)
+                          * juce::jlimit (0.20, 4.0, choreographyRate);
+        const double rd   = (double) sliceStartAbs + localPos + phraseOffset;
 
         float sL = rb.readAbs (rd, 0);
         float sR = rb.readAbs (rd, 1);
@@ -373,6 +429,13 @@ struct RepeatVoice
             if (p.driftMsPerRep != 0.0)
                 sliceStartAbs += (long long) std::llround (p.driftMsPerRep * fs * 0.001);
             ++rIndex;
+
+            if (p.playMode == 3)
+            {
+                const double spread = juce::jmax (2.0, curLen * 2.5) * juce::jlimit (0.0, 1.0, p.motion);
+                scatterOffset = (rng.nextDouble() * 2.0 - 1.0) * spread;
+            }
+
             if (rIndex >= p.repeats)
             {
                 if (p.loopBurst)
@@ -381,6 +444,7 @@ struct RepeatVoice
                     // cycle again -- seamless, and you always hear the full loop.
                     rIndex = 0;
                     curLen = sliceLenFor (0);
+                    scatterOffset = 0.0;
                     ++burstsPlayed;
                 }
                 else
@@ -405,6 +469,7 @@ struct RepeatVoice
     int   engineId = 0, rIndex = 0, burstsPlayed = 0;
     long long sliceStartAbs = 0;
     double pos = 0.0, curLen = 0.0, fs = 48000.0, tailGain = 1.0, tailRate = 0.9992, wowPhase = 0.0;
+    double scatterOffset = 0.0;
     float lastL = 0.0f, lastR = 0.0f, preL = 0.0f, preR = 0.0f;
 };
 
