@@ -166,9 +166,9 @@ strip** across the top holds everything you need mid-set:
 - **RANDOM TRIGGER** — the same, but it re-randomises every engine first,
   so each stab is a different failure. Turn on **LATCH** to make both
   trigger buttons toggle per click instead of hold-to-perform.
-- **RESET** — puts every parameter back to its default. Also happens
-  automatically whenever you load a new sample/track, so each track starts
-  from a clean slate.
+- **RESET** — puts every parameter back to its default. Loading a new sample
+  does not change the current effect settings, so the same design can be
+  auditioned across multiple sources.
 - Every control is right-click MIDI-mappable, so a controller can drive the
   dry/wet, density, chaos, or anything else hands-free.
 
@@ -176,12 +176,14 @@ strip** across the top holds everything you need mid-set:
 
 MIDI triggering is always live — there's no mode to switch on:
 
-- **Holding a key** selects a factory preset (note number cycles through
-  them) and plays it at **full wet** for as long as the key is held,
-  re-triggering on every grid step.
-- **Releasing the key** restores whatever your dry/wet was set to before.
-- Different keys give genuinely different effects, so a pad controller
-  becomes a bank of performance FX.
+- **Holding a white key** selects a deterministic failure engine and plays at
+  **full wet** for as long as the key is held.
+- **Holding a black key** selects a random failure and can re-roll its character
+  on subsequent cycles.
+- **Octave** selects the cycle subdivision: 1x / 4x / 8x / 16x / 32x.
+- **Releasing the final held key** restores the dry/wet value that was active
+  before MIDI performance began.
+- Multiple held keys can layer/chains effects through the available voice pool.
 
 Held MIDI notes are polyphonic: each held key can own an independent effect voice/cycle, subject to the 16-voice pool and voice-stealing rules.
 
