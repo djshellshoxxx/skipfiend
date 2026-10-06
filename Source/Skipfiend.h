@@ -192,6 +192,8 @@ struct RepeatVoice
         curLen = sliceLenFor (0);
         wowPhase = 0.0;
         scatterOffset = 0.0;
+        panCacheRepeat = -1;
+        panCache = 0.0;
         endedThisPass = false;
     }
 
@@ -267,7 +269,14 @@ struct RepeatVoice
         switch (p.panWalk)
         {
             case 1: pan = (i % 2 == 0) ? -0.7 : 0.7; break;
-            case 2: pan = rng.nextDouble() * 2.0 - 1.0; break;
+            case 2:
+                if (panCacheRepeat != i)
+                {
+                    panCacheRepeat = i;
+                    panCache = rng.nextDouble() * 2.0 - 1.0;
+                }
+                pan = panCache;
+                break;
             case 3: pan = juce::jlimit (-1.0, 1.0, (double) i / juce::jmax (1, p.repeats - 1) * 2.0 - 1.0); break;
             default: pan = 0.0; break;
         }
@@ -470,6 +479,8 @@ struct RepeatVoice
     long long sliceStartAbs = 0;
     double pos = 0.0, curLen = 0.0, fs = 48000.0, tailGain = 1.0, tailRate = 0.9992, wowPhase = 0.0;
     double scatterOffset = 0.0;
+    int panCacheRepeat = -1;
+    double panCache = 0.0;
     float lastL = 0.0f, lastR = 0.0f, preL = 0.0f, preR = 0.0f;
 };
 
