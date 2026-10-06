@@ -338,14 +338,24 @@ int main()
         check (! p->isGateOpen(), "gate starts closed");
         check (runBlocks (*p, 16, 512, r), "silence path with the gate closed");
 
+        auto* mixParam = p->apvts.getParameter ("mix");
+        mixParam->setValueNotifyingHost (0.23f);
+        const float baseMix = mixParam->getValue();
+
         p->setManualTrigger (true);
         check (p->isGateOpen(), "TRIGGER opens the gate");
+        check (std::abs (mixParam->getValue() - baseMix) < 1.0e-6f,
+               "TRIGGER does not overwrite the automatable MIX value");
         check (runBlocks (*p, 24, 512, r), "audio with TRIGGER held");
         p->setManualTrigger (false);
         check (! p->isGateOpen(), "releasing TRIGGER closes the gate");
+        check (std::abs (mixParam->getValue() - baseMix) < 1.0e-6f,
+               "TRIGGER release leaves MIX unchanged");
 
         p->engageRandomTrigger();
         check (p->isRandomTriggerEngaged(), "RANDOM TRIGGER engages");
+        check (std::abs (mixParam->getValue() - baseMix) < 1.0e-6f,
+               "RANDOM TRIGGER does not overwrite MIX");
         check (runBlocks (*p, 24, 512, r), "audio with RANDOM TRIGGER held");
         p->releaseRandomTrigger();
         check (! p->isGateOpen(), "releasing RANDOM TRIGGER closes the gate");
