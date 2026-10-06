@@ -253,18 +253,17 @@ The strip across the top is built to be played mid-set:
   RANDOM TRIGGER   The same, but re-randomises every engine first, so each
                    stab is a different failure. LATCH makes both trigger
                    buttons toggle per click instead of hold-to-perform.
-  RESET            Every parameter back to default. This also happens
-                   automatically when you load a new sample/track.
+  RESET            Every parameter back to default. Loading a new sample does
+                   not change the current effect settings.
 
 MIDI HOLD-TO-PERFORM
 ---------------------
-MIDI triggering is always live -- there is no mode to switch on. Holding a
-key selects a factory preset (note number cycles through them) and plays it
-at FULL WET for as long as the key is held, re-triggering every grid step.
-Releasing restores your dry/wet.
-Different keys give different effects, so a pad controller becomes a bank
-of performance FX. Last-note priority: a second key switches presets
-rather than layering.
+MIDI triggering is always live -- there is no mode to switch on. White keys
+select deterministic failure engines; black keys select random failures.
+Octave chooses the cycle subdivision (1x / 4x / 8x / 16x / 32x). Holds play
+at FULL WET without changing the base MIX parameter. Multiple held keys are
+polyphonic and can layer/chains effects through the voice pool. Releasing
+the final key returns to the user's normal MIX setting.
 
 LOOP / GRID LENGTH
 -------------------
@@ -287,9 +286,8 @@ MASTER SECTION
                    noise played between skips.
   SIDECHAIN TRIG   fires skips from transients on the Sidechain bus instead
                    of the grid (enable the Sidechain input in your host).
-  MIDI MODE        incoming MIDI notes trigger engines directly -- note
-                   number mod 8 picks the engine, velocity sets the repeat
-                   count.
+  MIDI PERFORMANCE white keys select deterministic engines, black keys
+                   randomise the failure, and octave chooses cycle speed.
   SKIP LANGUAGE    the 16-step sequencer at the bottom drives triggering
                    instead of the density/chaos dice. Click a cell to cycle
                    its engine (including off), mouse-wheel to set its
