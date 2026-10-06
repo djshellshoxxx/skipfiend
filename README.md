@@ -136,3 +136,7 @@ Outstanding before release:
 ## Plain-language overview
 
 See [ELI5: What SKIPFIEND does](ELI5.md) for a simple explanation of the effect.
+
+## Required shared plug-in standard
+
+This project follows the [Circuit Drift Labs Shared Audio Plugin Standard](docs/standards/CDL_PLUGIN_BASELINE.md). It is required for the plug-in target; standalone-only requirements apply only when a standalone target is included. The product-specific specification supplements the shared standard and records the applicable profiles, compliance status, and any exceptions.
