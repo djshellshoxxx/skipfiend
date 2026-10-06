@@ -214,6 +214,43 @@ int main()
                "RECORD SKIP constraints defeat global modulation");
     }
 
+    // ---- TAPE DROPOUT reverse recovery is real audio, not just a flash -----
+    std::cout << "[1e] tape reverse recovery" << std::endl;
+    {
+        skf::RollingBuffer rb;
+        rb.prepare (1000.0, 2, 1.0);
+        juce::AudioBuffer<float> ramp (2, 64);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < ramp.getNumSamples(); ++i)
+                ramp.setSample (ch, i, (float) i / 64.0f);
+        rb.push (ramp);
+
+        skf::RepeatParams a;
+        a.repeats = 1;
+        a.sliceMinS = a.sliceMaxS = 0.020;
+        a.flavor = 2;
+        a.tapeReverse = false;
+
+        skf::RepeatParams b = a;
+        b.tapeReverse = true;
+
+        skf::RepeatVoice forward, reverse;
+        const auto start = rb.now() - 24;
+        forward.start (start, a, skf::TAPEDO, 1000.0);
+        reverse.start (start, b, skf::TAPEDO, 1000.0);
+
+        float fL = 0.0f, fR = 0.0f, rL = 0.0f, rR = 0.0f;
+        for (int i = 0; i < 18; ++i)
+        {
+            fL = fR = rL = rR = 0.0f;
+            forward.render (rb, &fL, &fR);
+            reverse.render (rb, &rL, &rR);
+        }
+
+        check (std::abs (fL - rL) > 1.0e-4f || std::abs (fR - rR) > 1.0e-4f,
+               "TAPE DROPOUT reverse recovery changes the audio path");
+    }
+
     // ---- 2. each engine alone, then all together ---------------------------
     std::cout << "[2] engines" << std::endl;
     {
