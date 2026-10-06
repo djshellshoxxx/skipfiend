@@ -837,33 +837,19 @@ void SkipfiendAudioProcessor::tapTempo()
 
 void SkipfiendAudioProcessor::setManualTrigger (bool held)
 {
-    if (held == manualTriggerHeld.load()) return;
-
-    if (auto* mp = apvts.getParameter (P::mix))
-    {
-        if (held) { savedMixBeforeManualTrigger = mp->getValue(); mp->setValueNotifyingHost (1.0f); }
-        else      { mp->setValueNotifyingHost (savedMixBeforeManualTrigger); }
-    }
     manualTriggerHeld.store (held);
 }
 
 void SkipfiendAudioProcessor::engageRandomTrigger()
 {
-    if (auto* mp = apvts.getParameter (P::mix))
-    {
-        if (! randomTriggerEngaged.load()) savedMixBeforeRandomTrigger = mp->getValue();
+    if (! randomTriggerEngaged.load())
         randomizeSkipParams();
-        mp->setValueNotifyingHost (1.0f);        // slam to full wet
-    }
     randomTriggerEngaged.store (true);
 }
 
 void SkipfiendAudioProcessor::releaseRandomTrigger()
 {
-    if (! randomTriggerEngaged.load()) return;
     randomTriggerEngaged.store (false);
-    if (auto* mp = apvts.getParameter (P::mix))
-        mp->setValueNotifyingHost (savedMixBeforeRandomTrigger);
 }
 
 juce::StringArray SkipfiendAudioProcessor::getFactoryPresetNames()
@@ -1120,21 +1106,20 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const bool   scOn     = cachedParam (P::scTrigger) > 0.5f;
     const float  density  = cachedParam (P::density);
     const float  chaos    = cachedParam (P::chaos);
-    const float  mix      = cachedParam (P::mix);
+    const float  baseMix  = cachedParam (P::mix);
     const float  artAmt   = cachedParam (P::artifacts);
 
     // ---- test-sample deck: replaces the incoming buffer when armed --------
     if (useSample.load() && sampleLoaded.load())
     {
-        juce::AudioBuffer<float> sBuf (juce::jmax (1, mainCh), n);
-        juce::AudioSourceChannelInfo info (&sBuf, 0, n);
+        // A view onto the host-owned main channels: AudioTransportSource writes
+        // straight into the destination without allocating a scratch buffer in
+        // the real-time callback.
+        juce::AudioBuffer<float> sampleView (buffer.getArrayOfWritePointers(),
+                                             juce::jmax (1, mainCh), n);
+        juce::AudioSourceChannelInfo info (&sampleView, 0, n);
         transport.getNextAudioBlock (info);
-        const float g = sampleGain.load();
-        for (int c = 0; c < mainCh; ++c)
-        {
-            buffer.clear (c, 0, n);
-            buffer.addFrom (c, 0, sBuf, juce::jmin (c, sBuf.getNumChannels() - 1), 0, n, g);
-        }
+        sampleView.applyGain (sampleGain.load());
         if (samplePlaying.load() && ! transport.isPlaying())
             samplePlaying.store (false);
     }
@@ -1166,14 +1151,8 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             lastMidiChan.store (m.getChannel());
             midiNoteOns.fetch_add (1);
 
-            // first key down grabs the mix and slams full wet
-            if (nHeld == 0)
-                if (auto* mp = apvts.getParameter (P::mix))
-                {
-                    savedMixBeforeMidiHold = mp->getValue();
-                    mp->setValueNotifyingHost (1.0f);
-                }
-
+            // Performance wetness is an internal override; MIDI must never
+            // overwrite the user's automatable MIX parameter.
             // already held? retrigger it rather than adding a duplicate
             int slot = -1;
             for (int i = 0; i < nHeld; ++i) if (heldKeys[i].note == note) { slot = i; break; }
@@ -1229,9 +1208,7 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 }
             numHeldKeys.store (juce::jmax (0, nHeld));
 
-            if (nHeld <= 0)
-                if (auto* mp = apvts.getParameter (P::mix))
-                    mp->setValueNotifyingHost (savedMixBeforeMidiHold);
+            juce::ignoreUnused (nHeld);
         }
         else if (m.isController())
         {
@@ -1605,10 +1582,11 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
         const float target = any ? 1.0f : 0.0f;
         actSmooth += 0.02f * (target - actSmooth);
-        const float a = actSmooth * mix;
+        const float effectiveMix = gateOpen ? 1.0f : baseMix;
+        const float a = actSmooth * effectiveMix;
 
-        float ol  = dl * (1.0f - a) + wl * mix;
-        float orr = dr * (1.0f - a) + wr * mix;
+        float ol  = dl * (1.0f - a) + wl * effectiveMix;
+        float orr = dr * (1.0f - a) + wr * effectiveMix;
 
         // ---- overlay chain, appended to the END of whatever is playing -------
         // Captured before the overlays so REVERSE chews on the finished effect
