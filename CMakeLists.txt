@@ -26,14 +26,13 @@ endif()
 # manual and the troubleshooting export. Replace these three lines before
 # release and every one of those follows.
 # ---------------------------------------------------------------------------
-set(SKIPFIEND_HOMEPAGE      "https://fiendaudio.example/skipfiend" CACHE STRING "Product homepage")
-set(SKIPFIEND_SUPPORT_EMAIL "support@fiendaudio.example"           CACHE STRING "Support email")
-set(SKIPFIEND_GITHUB        "https://github.com/fiendaudio/skipfiend" CACHE STRING "Source repository")
+set(SKIPFIEND_HOMEPAGE        "https://djshellshoxxx.github.io/circuitdriftlabs/" CACHE STRING "Product homepage")
+set(SKIPFIEND_SUPPORT_CONTACT "https://github.com/djshellshoxxx/skipfiend/issues" CACHE STRING "Support contact")
+set(SKIPFIEND_GITHUB          "https://github.com/djshellshoxxx/skipfiend" CACHE STRING "Source repository")
 
 juce_add_plugin(SKIPFIEND
-    COMPANY_NAME              "FiendAudio"
+    COMPANY_NAME              "Circuit Drift Labs"
     COMPANY_WEBSITE           "${SKIPFIEND_HOMEPAGE}"
-    COMPANY_EMAIL             "${SKIPFIEND_SUPPORT_EMAIL}"
     PLUGIN_MANUFACTURER_CODE  Fnda
     PLUGIN_CODE               Skpf
     FORMATS                   VST3 Standalone
@@ -58,7 +57,7 @@ target_sources(SKIPFIEND PRIVATE
 target_compile_definitions(SKIPFIEND PUBLIC
     SKIPFIEND_VERSION="${PROJECT_VERSION}"
     SKIPFIEND_HOMEPAGE="${SKIPFIEND_HOMEPAGE}"
-    SKIPFIEND_SUPPORT_EMAIL="${SKIPFIEND_SUPPORT_EMAIL}"
+    SKIPFIEND_SUPPORT_CONTACT="${SKIPFIEND_SUPPORT_CONTACT}"
     SKIPFIEND_GITHUB="${SKIPFIEND_GITHUB}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
@@ -94,7 +93,7 @@ if(SKIPFIEND_BUILD_TESTS)
     target_compile_definitions(SKIPFIEND_Tests PRIVATE
         SKIPFIEND_VERSION="${PROJECT_VERSION}"
         SKIPFIEND_HOMEPAGE="${SKIPFIEND_HOMEPAGE}"
-        SKIPFIEND_SUPPORT_EMAIL="${SKIPFIEND_SUPPORT_EMAIL}"
+        SKIPFIEND_SUPPORT_CONTACT="${SKIPFIEND_SUPPORT_CONTACT}"
         SKIPFIEND_GITHUB="${SKIPFIEND_GITHUB}"
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
