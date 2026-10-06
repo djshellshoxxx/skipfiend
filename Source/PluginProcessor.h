@@ -268,10 +268,12 @@ private:
     std::atomic<double> bufferedSeconds { 64.0 };
 
     // ---- MIDI learn ---------------------------------------------------
+    // Fixed-size, lock-free mapping used directly by processBlock.
     std::atomic<bool> midiLearnActive { false };
-    mutable juce::SpinLock midiLearnLock;
-    juce::String learnTargetId;
-    std::map<int, juce::String> ccToParam;
+    std::atomic<int> midiLearnTargetIndex { -1 };
+    std::array<std::atomic<int>, 128> ccToParamIndex {};
+    int parameterIndexForId (const juce::String& paramId) const;
+    juce::String parameterIdForIndex (int index) const;
 
     // ---- live performance state ------------------------------------------
     // Polyphonic held keys. Each key runs its own effect at its own rate, so
