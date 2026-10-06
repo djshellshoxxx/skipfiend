@@ -179,6 +179,18 @@ int main()
                "high-rate render consumes every crossed slice boundary");
     }
 
+    // ---- regression: random pan is random per repeat, not per sample --------
+    std::cout << "[1c] repeat-stable random pan" << std::endl;
+    {
+        skf::RepeatVoice v;
+        v.p.panWalk = 2;
+        float l1 = 0.0f, r1 = 0.0f, l2 = 0.0f, r2 = 0.0f;
+        v.panFor (3, l1, r1);
+        v.panFor (3, l2, r2);
+        check (std::abs (l1 - l2) < 1.0e-7f && std::abs (r1 - r2) < 1.0e-7f,
+               "Random Pan Walk holds one position for the duration of a repeat");
+    }
+
     // ---- 2. each engine alone, then all together ---------------------------
     std::cout << "[2] engines" << std::endl;
     {
