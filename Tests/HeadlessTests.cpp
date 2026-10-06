@@ -574,7 +574,7 @@ int main()
 
         // the brand strings come from CMake; make sure they actually reach the
         // generated text rather than merely compiling
-        check (report.contains (SKIPFIEND_SUPPORT_EMAIL),
+        check (report.contains (SKIPFIEND_SUPPORT_CONTACT),
                "report carries the support address from CMake");
         check (report.contains (SKIPFIEND_HOMEPAGE),
                "report carries the homepage from CMake");
