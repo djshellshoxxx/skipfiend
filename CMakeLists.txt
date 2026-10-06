@@ -29,6 +29,7 @@ endif()
 set(SKIPFIEND_HOMEPAGE        "https://djshellshoxxx.github.io/circuitdriftlabs/" CACHE STRING "Product homepage")
 set(SKIPFIEND_SUPPORT_CONTACT "https://github.com/djshellshoxxx/skipfiend/issues" CACHE STRING "Support contact")
 set(SKIPFIEND_GITHUB          "https://github.com/djshellshoxxx/skipfiend" CACHE STRING "Source repository")
+option(SKIPFIEND_COPY_PLUGIN_AFTER_BUILD "Install built plug-in after a local build" ON)
 
 juce_add_plugin(SKIPFIEND
     COMPANY_NAME              "Circuit Drift Labs"
@@ -42,7 +43,7 @@ juce_add_plugin(SKIPFIEND
     NEEDS_MIDI_INPUT          TRUE
     NEEDS_MIDI_OUTPUT         FALSE
     IS_MIDI_EFFECT           FALSE
-    COPY_PLUGIN_AFTER_BUILD   TRUE
+    COPY_PLUGIN_AFTER_BUILD   ${SKIPFIEND_COPY_PLUGIN_AFTER_BUILD}
     VST3_CATEGORIES           Fx Distortion
     ICON_BIG                  "${CMAKE_CURRENT_SOURCE_DIR}/Source/icon.png"
     ICON_SMALL                "${CMAKE_CURRENT_SOURCE_DIR}/Source/icon_small.png"
