@@ -60,6 +60,7 @@ SkipfiendAudioProcessor::SkipfiendAudioProcessor()
         seqRepeats[i].store (8);
     }
     for (auto& s : logRing) { s.a.store (0); s.b.store (0); }
+    for (auto& mapping : ccToParamIndex) mapping.store (-1);
     voices.resize (16);          // polyphonic keys can each want voices at once
     voiceLayer.assign (voices.size(), 0);
     formatManager.registerBasicFormats();
@@ -573,57 +574,85 @@ void SkipfiendAudioProcessor::logEvent (int engine, int code, const skf::RepeatP
 }
 
 //==============================================================================
+int SkipfiendAudioProcessor::parameterIndexForId (const juce::String& paramId) const
+{
+    const auto& params = getParameters();
+    for (int i = 0; i < params.size(); ++i)
+        if (auto* wp = dynamic_cast<juce::AudioProcessorParameterWithID*> (params[i]))
+            if (wp->paramID == paramId)
+                return i;
+    return -1;
+}
+
+juce::String SkipfiendAudioProcessor::parameterIdForIndex (int index) const
+{
+    const auto& params = getParameters();
+    if (index < 0 || index >= params.size())
+        return {};
+    if (auto* wp = dynamic_cast<juce::AudioProcessorParameterWithID*> (params[index]))
+        return wp->paramID;
+    return {};
+}
+
 void SkipfiendAudioProcessor::handleMidiCC (int cc, float v01)
 {
-    if (midiLearnActive.load())
+    if (cc < 0 || cc >= 128)
+        return;
+
+    if (midiLearnActive.load (std::memory_order_acquire))
     {
-        juce::String target;
+        const int target = midiLearnTargetIndex.load (std::memory_order_relaxed);
+        if (target < 0)
         {
-            const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-            target = learnTargetId;
-            if (target.isEmpty()) { midiLearnActive.store (false); return; }
-            for (auto it = ccToParam.begin(); it != ccToParam.end(); )
-                if (it->second == target) it = ccToParam.erase (it); else ++it;
-            ccToParam[cc] = target;
+            midiLearnActive.store (false, std::memory_order_release);
+            return;
         }
-        midiLearnActive.store (false);
+
+        // One parameter owns at most one CC mapping. Fixed-size atomics keep
+        // this learning path deterministic and allocation-free on the audio thread.
+        for (auto& mapping : ccToParamIndex)
+            if (mapping.load (std::memory_order_relaxed) == target)
+                mapping.store (-1, std::memory_order_relaxed);
+
+        ccToParamIndex[(size_t) cc].store (target, std::memory_order_release);
+        midiLearnActive.store (false, std::memory_order_release);
         return;
     }
 
-    juce::String pid;
-    {
-        const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-        auto it = ccToParam.find (cc);
-        if (it == ccToParam.end()) return;
-        pid = it->second;
-    }
-    if (auto* p = apvts.getParameter (pid))
-        p->setValueNotifyingHost (v01);
+    const int target = ccToParamIndex[(size_t) cc].load (std::memory_order_acquire);
+    const auto& params = getParameters();
+    if (target >= 0 && target < params.size())
+        params[target]->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, v01));
 }
 
 void SkipfiendAudioProcessor::startMidiLearn (const juce::String& paramId)
 {
-    { const juce::SpinLock::ScopedLockType sl (midiLearnLock); learnTargetId = paramId; }
-    midiLearnActive.store (true);
+    const int index = parameterIndexForId (paramId);
+    midiLearnTargetIndex.store (index, std::memory_order_release);
+    midiLearnActive.store (index >= 0, std::memory_order_release);
 }
 
 juce::String SkipfiendAudioProcessor::getMidiLearnTargetId() const
 {
-    const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-    return learnTargetId;
+    return parameterIdForIndex (midiLearnTargetIndex.load (std::memory_order_acquire));
 }
 
 void SkipfiendAudioProcessor::clearMidiMapping (const juce::String& paramId)
 {
-    const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-    for (auto it = ccToParam.begin(); it != ccToParam.end(); )
-        if (it->second == paramId) it = ccToParam.erase (it); else ++it;
+    const int index = parameterIndexForId (paramId);
+    if (index < 0) return;
+    for (auto& mapping : ccToParamIndex)
+        if (mapping.load (std::memory_order_relaxed) == index)
+            mapping.store (-1, std::memory_order_release);
 }
 
 int SkipfiendAudioProcessor::getMappedCcFor (const juce::String& paramId) const
 {
-    const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-    for (auto& kv : ccToParam) if (kv.second == paramId) return kv.first;
+    const int index = parameterIndexForId (paramId);
+    if (index < 0) return -1;
+    for (int cc = 0; cc < 128; ++cc)
+        if (ccToParamIndex[(size_t) cc].load (std::memory_order_acquire) == index)
+            return cc;
     return -1;
 }
 
@@ -1709,17 +1738,19 @@ void SkipfiendAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
     state.appendChild (seq, nullptr);
 
     auto midiTree = juce::ValueTree ("MIDILEARN");
+    int mappingCount = 0;
+    for (int cc = 0; cc < 128; ++cc)
     {
-        const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-        int i = 0;
-        for (auto& kv : ccToParam)
+        const int paramIndex = ccToParamIndex[(size_t) cc].load (std::memory_order_acquire);
+        const auto pid = parameterIdForIndex (paramIndex);
+        if (paramIndex >= 0 && pid.isNotEmpty())
         {
-            midiTree.setProperty ("cc" + juce::String (i), kv.first, nullptr);
-            midiTree.setProperty ("id" + juce::String (i), kv.second, nullptr);
-            ++i;
+            midiTree.setProperty ("cc" + juce::String (mappingCount), cc, nullptr);
+            midiTree.setProperty ("id" + juce::String (mappingCount), pid, nullptr);
+            ++mappingCount;
         }
-        midiTree.setProperty ("count", i, nullptr);
     }
+    midiTree.setProperty ("count", mappingCount, nullptr);
     state.appendChild (midiTree, nullptr);
 
     auto ui = juce::ValueTree ("UI");
@@ -1750,14 +1781,15 @@ void SkipfiendAudioProcessor::setStateInformation (const void* data, int size)
             auto midiTree = tree.getChildWithName ("MIDILEARN");
             if (midiTree.isValid())
             {
+                for (auto& mapping : ccToParamIndex) mapping.store (-1, std::memory_order_release);
                 const int count = (int) midiTree.getProperty ("count", 0);
-                const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-                ccToParam.clear();
                 for (int i = 0; i < count; ++i)
                 {
                     const int cc = (int) midiTree.getProperty ("cc" + juce::String (i), -1);
                     const juce::String pid = midiTree.getProperty ("id" + juce::String (i), "").toString();
-                    if (cc >= 0 && pid.isNotEmpty()) ccToParam[cc] = pid;
+                    const int paramIndex = parameterIndexForId (pid);
+                    if (cc >= 0 && cc < 128 && paramIndex >= 0)
+                        ccToParamIndex[(size_t) cc].store (paramIndex, std::memory_order_release);
                 }
                 tree.removeChild (midiTree, nullptr);
             }
@@ -1872,11 +1904,19 @@ juce::String SkipfiendAudioProcessor::buildTroubleshootingReport()
       << "CC messages:    " << (unsigned long) midiCCs.load() << juce::newLine
       << "Held keys:      " << numHeldKeys.load() << juce::newLine;
     {
-        const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-        r << "CC mappings:    " << (int) ccToParam.size() << juce::newLine;
+        int mappings = 0;
+        for (int cc = 0; cc < 128; ++cc)
+            if (ccToParamIndex[(size_t) cc].load (std::memory_order_acquire) >= 0)
+                ++mappings;
+        r << "CC mappings:    " << mappings << juce::newLine;
 
-        for (const auto& m : ccToParam)
-            r << "                CC " << m.first << "  ->  " << m.second << juce::newLine;
+        for (int cc = 0; cc < 128; ++cc)
+        {
+            const int paramIndex = ccToParamIndex[(size_t) cc].load (std::memory_order_acquire);
+            if (paramIndex >= 0)
+                r << "                CC " << cc << "  ->  "
+                  << parameterIdForIndex (paramIndex) << juce::newLine;
+        }
     }
     r << juce::newLine;
 
@@ -2060,13 +2100,10 @@ void SkipfiendAudioProcessor::hardResetAndClearCache()
         seqRepeats[i].store (8);
     }
 
-    {
-        const juce::SpinLock::ScopedLockType sl (midiLearnLock);
-        ccToParam.clear();
-        learnTargetId.clear();
-    }
-
-    midiLearnActive.store (false);
+    for (auto& mapping : ccToParamIndex)
+        mapping.store (-1, std::memory_order_release);
+    midiLearnTargetIndex.store (-1, std::memory_order_release);
+    midiLearnActive.store (false, std::memory_order_release);
 
     abSlot[0].reset();
     abSlot[1].reset();
