@@ -926,6 +926,42 @@ int main()
         check (p->getBusCount (true) >= 1, "at least one input bus");
         check (p->getBusCount (false) >= 1, "at least one output bus");
 
+        // A real sidechain signal must survive the process-buffer housekeeping
+        // and reach the transient detector.
+        {
+            juce::AudioProcessor::BusesLayout withSc;
+            withSc.inputBuses.add (Set::stereo());
+            withSc.inputBuses.add (Set::mono());
+            withSc.outputBuses.add (Set::stereo());
+
+            const bool applied = p->setBusesLayout (withSc);
+            check (applied, "stereo + mono sidechain layout can be applied");
+
+            if (applied)
+            {
+                p->prepareToPlay (48000.0, 512);
+                p->resetAllToDefaults();
+                p->apvts.getParameter ("scTrigger")->setValueNotifyingHost (1.0f);
+                if (auto* th = p->apvts.getParameter ("scThresh"))
+                    th->setValueNotifyingHost (th->convertTo0to1 (-50.0f));
+                p->setManualTrigger (true);
+                p->lastEngineFired.store (-1);
+
+                juce::AudioBuffer<float> scBuffer (3, 512);
+                scBuffer.clear();
+                scBuffer.setSample (2, 64, 1.0f);
+                scBuffer.setSample (2, 65, 0.8f);
+                juce::MidiBuffer midi;
+                p->processBlock (scBuffer, midi);
+
+                check (p->lastEngineFired.load() >= 0,
+                       "sidechain transient reaches the detector and fires an engine");
+                check (bufferIsSane (scBuffer), "sidechain processing stays finite");
+                p->setManualTrigger (false);
+                p->resetAllToDefaults();
+            }
+        }
+
         // Actually negotiate mono and run it - the layout least likely to have
         // been exercised by hand.
         {
