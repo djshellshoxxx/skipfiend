@@ -1687,8 +1687,8 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
     midiExportBtn.setTooltip ("Export the retrigger pattern just played as a .mid file.");
     canvas.addAndMakeVisible (captureBtn);
     canvas.addAndMakeVisible (midiExportBtn);
-    captureBtn.onClick    = [this] { proc.requestCapture.store (true); };
-    midiExportBtn.onClick = [this] { proc.requestMidiExport.store (true); };
+    captureBtn.onClick    = [this] { proc.doCapture(); };
+    midiExportBtn.onClick = [this] { proc.doMidiExport(); };
 
     // ---- header: bypass / help / dice / presets / meter ----
     bypassBtn.setLookAndFeel (&lnf);
