@@ -1,0 +1,24 @@
+name: SKIPFIEND CI
+
+on:
+  push:
+    branches: [ main, "audit/**" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSKIPFIEND_BUILD_TESTS=ON
+
+      - name: Build headless tests
+        run: cmake --build build --target SKIPFIEND_Tests --config Release --parallel 2
+
+      - name: Run headless tests
+        run: ctest --test-dir build --output-on-failure -C Release
