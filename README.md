@@ -131,3 +131,8 @@ Outstanding before release:
 - **The support URLs and email are placeholders** (`fiendaudio.example`). They now live in exactly one place — `SKIPFIEND_HOMEPAGE`, `SKIPFIEND_SUPPORT_EMAIL` and `SKIPFIEND_GITHUB` at the top of `CMakeLists.txt` — and feed the VST3 module info a host displays, the About box, the in-plugin manual and the troubleshooting export. Change those three lines and everything follows.
 - **No CLAP or Linux build yet** — both are planned; the CMake only produces VST3 and Standalone today.
 - **GUI testing is manual.** The headless harness covers the processor thoroughly, but nothing automated exercises clicks, drags or painting. A `pluginval` run in a real host is still the last gate before shipping.
+
+
+## Plain-language overview
+
+See [ELI5: What SKIPFIEND does](ELI5.md) for a simple explanation of the effect.
