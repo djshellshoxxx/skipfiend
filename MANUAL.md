@@ -69,8 +69,10 @@ Behaviour (hard cut / tail out / glitch click / seek noise / silence-resume).
   noise played between skips.
 - **SIDECHAIN TRIGGER** — fires skips from transients on the Sidechain bus
   instead of the grid (enable the Sidechain input in your host).
-- **MIDI MODE** — incoming MIDI notes trigger engines directly: note number
-  mod 8 picks the engine, velocity sets the repeat count.
+- **MIDI PERFORMANCE** — white keys select deterministic failure engines,
+  black keys select random failures, and octave selects the cycle subdivision
+  (1x / 4x / 8x / 16x / 32x). Velocity is retained as activity telemetry but
+  does not set repeat count.
 - **SKIP LANGUAGE** — the 16-step sequencer at the bottom drives triggering
   instead of the density/chaos dice. Click a cell to cycle its engine
   (including off), mouse-wheel to set its repeat count.
