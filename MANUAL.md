@@ -183,8 +183,7 @@ MIDI triggering is always live — there's no mode to switch on:
 - Different keys give genuinely different effects, so a pad controller
   becomes a bank of performance FX.
 
-Note: this is last-note-priority (monophonic) — pressing a second key
-switches to that key's preset rather than layering.
+Held MIDI notes are polyphonic: each held key can own an independent effect voice/cycle, subject to the 16-voice pool and voice-stealing rules.
 
 ## Overlay FX — Echo / Delay / Dub / Reverse
 
@@ -283,8 +282,7 @@ locked.
 
 The engines are functional models rather than fully spectral-accurate
 emulations — MP3 CORRUPT and TAPE DROPOUT in particular are lightweight
-approximations. TAPE DROPOUT's "reverse" recovery is a visual flicker in
-the display rather than true reversed audio playback.
+approximations. TAPE DROPOUT is a stylised tape-failure model; its occasional reverse recovery now reverses the tail of the captured slice in the audio path.
 
 ## Keyboard
 
