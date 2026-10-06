@@ -1079,6 +1079,22 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         outPeakL.store (pk); outPeakR.store (pk);
         outGainReduction.store (0.0f);
         activeEngineMask.store (0);
+
+        // Internal bypass discards transient performance state. In particular,
+        // note-offs that occur while bypassed must not leave a key logically
+        // held and make the effect spring back on when bypass is released.
+        for (auto& v : voices) v.active = false;
+        numHeldKeys.store (0);
+        triggerStarted = false;
+        triggerVoiceIndex = -1;
+        gateWasOpen = false;
+        for (int o = 0; o < NUM_OVERLAYS; ++o)
+        {
+            overlayArmed[o] = false;
+            overlayActive[o] = false;
+        }
+        reverser.stop();
+
         // bypass passes the live signal, so the playhead re-syncs on the way out
         playheadInit = false;
         timeSuspended = false;
