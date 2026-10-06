@@ -1622,6 +1622,7 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
     addKnob ("pitchPerSkip", "PITCH STEP",   "Semitones applied per repeat in Ascending/Descending/Chromatic/Drift.");
     addKnob ("basePitch",    "BASE PITCH",   "Constant pitch offset applied to every repeat, in semitones.");
     addKnob ("timewarp",     "TIMEWARP",     "Speeds up (right) or slows down (left) playback rate over the burst.");
+    addKnob ("motion",       "MOTION",       "Depth of the selected playback style: direction flips, fragment jumps, stereo travel and speed movement.");
     addCombo ("lenMode",   { "Fixed", "Ramp Shorter", "Ramp Longer", "Random" },
               "How slice length changes across the burst.");
     addCombo ("pitchMode", { "Stable", "Ascending", "Descending", "Chromatic", "Drift" },
@@ -1632,6 +1633,8 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
               "Stereo placement across the burst.");
     addCombo ("endMode",   { "Hard Cut", "Tail Out", "Glitch Click", "Seek Noise", "Silence / Resume" },
               "What happens when the burst finishes.");
+    addCombo ("playMode",  { "Classic", "Stutter Edit", "Ping-Pong", "Scatter", "Orbit", "Evolve" },
+              "Changes how repeats move through the captured audio. Classic keeps the original straight playback; the other modes add phrase-level motion.");
 
     // ---- master ---- (MIX lives up in the performance row instead)
     addKnob ("density",  "SKIP DENSITY", "How often the plugin fires new skips.");
@@ -2888,25 +2891,25 @@ void SkipfiendAudioProcessorEditor::layoutCanvasContents()
     // collides the moment an engine is added.
     const int kEngineKnobs = skf::NUM_ENGINES * 3;   // AMT / PRB / RATE per engine
     const int kRepeatKnob0 = kEngineKnobs;
-    const int kMasterKnob0 = kRepeatKnob0 + 7;
+    const int kMasterKnob0 = kRepeatKnob0 + 8;
 
-    // repeat engine row: 7 knobs + 5 combos across 12 columns
+    // repeat engine row: 8 knobs + 6 combos across 14 columns
     {
-        const int cols = 12;
+        const int cols = 14;
         const int cw = W / cols;
         const int y = 558 + O;
         // Spec caps a knob at 64px (the "large" size); columns are wider than
         // that here, so centre the knob in its column rather than filling it.
         const int ks = juce::jmin (kKnobLarge, cw - 6);
 
-        for (int i = 0; i < 7; ++i)
+        for (int i = 0; i < 8; ++i)
         {
             const int kx = M + i * cw + (cw - ks) / 2;
             knobs[kRepeatKnob0 + i]->setBounds (kx, y, ks, ks);
             labels[kRepeatKnob0 + i]->setBounds (M + i * cw - 6, y + ks + 2, cw + 12, 12);
         }
-        for (int i = 0; i < 5; ++i)
-            combos[i]->setBounds (M + (7 + i) * cw + 3, y + 26, cw - 6, 22);
+        for (int i = 0; i < 6; ++i)
+            combos[i]->setBounds (M + (8 + i) * cw + 3, y + 26, cw - 6, 22);
     }
 
     // master row: 5 knobs + grid combo + 4 toggles across 10 columns
@@ -2922,7 +2925,7 @@ void SkipfiendAudioProcessorEditor::layoutCanvasContents()
             knobs[kMasterKnob0 + i]->setBounds (kx, y, ks, ks);
             labels[kMasterKnob0 + i]->setBounds (M + i * cw - 6, y + ks + 2, cw + 12, 12);
         }
-        combos[5]->setBounds (M + 5 * cw + 4, y + 20, cw - 8, 22);
+        combos[6]->setBounds (M + 5 * cw + 4, y + 20, cw - 8, 22);
         for (int i = 0; i < toggles.size(); ++i)
             toggles[i]->setBounds (M + (6 + i) * cw + 2, y + 6, cw - 6, 22);
     }

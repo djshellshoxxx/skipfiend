@@ -154,6 +154,43 @@ int main()
 
     p->prepareToPlay (48000.0, 512);
 
+    // ---- regression: high playback rates may cross multiple slice edges -----
+    std::cout << "[1b] repeat voice high-rate boundary handling" << std::endl;
+    {
+        skf::RollingBuffer rb;
+        rb.prepare (1000.0, 2, 1.0);
+        juce::AudioBuffer<float> src (2, 64);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < src.getNumSamples(); ++i)
+                src.setSample (ch, i, (float) i / 64.0f);
+        rb.push (src);
+
+        skf::RepeatParams rp;
+        rp.repeats = 8;
+        rp.sliceMinS = rp.sliceMaxS = 0.002; // 2 samples at 1 kHz
+        rp.basePitchSemi = 24.0;             // 4x read rate
+        rp.timewarp = 1.0;
+        skf::RepeatVoice v;
+        v.start (rb.now() - 16, rp, skf::CDSKIP, 1000.0);
+
+        float l = 0.0f, rr = 0.0f;
+        v.render (rb, &l, &rr);
+        check (! v.isActive() || v.pos < v.curLen,
+               "high-rate render consumes every crossed slice boundary");
+    }
+
+    // ---- regression: random pan is random per repeat, not per sample --------
+    std::cout << "[1c] repeat-stable random pan" << std::endl;
+    {
+        skf::RepeatVoice v;
+        v.p.panWalk = 2;
+        float l1 = 0.0f, r1 = 0.0f, l2 = 0.0f, r2 = 0.0f;
+        v.panFor (3, l1, r1);
+        v.panFor (3, l2, r2);
+        check (std::abs (l1 - l2) < 1.0e-7f && std::abs (r1 - r2) < 1.0e-7f,
+               "Random Pan Walk holds one position for the duration of a repeat");
+    }
+
     // ---- 2. each engine alone, then all together ---------------------------
     std::cout << "[2] engines" << std::endl;
     {
@@ -185,7 +222,7 @@ int main()
     // ---- 3. every discrete mode of the repeat engine ------------------------
     std::cout << "[3] repeat engine modes" << std::endl;
     {
-        const char* modeIds[] = { "lenMode", "pitchMode", "volEnv", "panWalk", "endMode", "grid" };
+        const char* modeIds[] = { "lenMode", "pitchMode", "volEnv", "panWalk", "endMode", "playMode", "grid" };
 
         for (const char* id : modeIds)
         {
@@ -207,6 +244,8 @@ int main()
             }
 
             check (sane, juce::String ("every value of ") + id);
+            if (juce::String (id) == "playMode")
+                check (param->getNumSteps() >= 5, "playMode exposes multiple playback personalities");
             param->setValueNotifyingHost (param->getDefaultValue());
         }
     }
