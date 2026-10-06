@@ -185,7 +185,7 @@ int main()
     // ---- 3. every discrete mode of the repeat engine ------------------------
     std::cout << "[3] repeat engine modes" << std::endl;
     {
-        const char* modeIds[] = { "lenMode", "pitchMode", "volEnv", "panWalk", "endMode", "grid" };
+        const char* modeIds[] = { "lenMode", "pitchMode", "volEnv", "panWalk", "endMode", "playMode", "grid" };
 
         for (const char* id : modeIds)
         {
@@ -207,6 +207,8 @@ int main()
             }
 
             check (sane, juce::String ("every value of ") + id);
+            if (juce::String (id) == "playMode")
+                check (param->getNumSteps() >= 5, "playMode exposes multiple playback personalities");
             param->setValueNotifyingHost (param->getDefaultValue());
         }
     }
