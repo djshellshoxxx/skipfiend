@@ -191,6 +191,29 @@ int main()
                "Random Pan Walk holds one position for the duration of a repeat");
     }
 
+    // ---- invariant: RECORD SKIP remains a verbatim locked groove -----------
+    std::cout << "[1d] record skip invariants" << std::endl;
+    {
+        skf::RepeatParams rp;
+        rp.lenMode = 3;
+        rp.pitchMode = 4;
+        rp.basePitchSemi = 12.0;
+        rp.pitchPerRep = 7.0;
+        rp.volEnv = 3;
+        rp.panWalk = 2;
+        rp.timewarp = 1.0;
+        rp.flavor = 2;
+        rp.gate = true;
+        rp.playMode = 5;
+        rp.motion = 1.0;
+        skf::enforceRecordSkipVerbatim (rp);
+        check (rp.lenMode == 0 && rp.pitchMode == 0
+                   && rp.basePitchSemi == 0.0 && rp.pitchPerRep == 0.0
+                   && rp.volEnv == 0 && rp.panWalk == 0 && rp.timewarp == 0.0
+                   && rp.flavor == 0 && ! rp.gate && rp.playMode == 0 && rp.motion == 0.0,
+               "RECORD SKIP constraints defeat global modulation");
+    }
+
     // ---- 2. each engine alone, then all together ---------------------------
     std::cout << "[2] engines" << std::endl;
     {
