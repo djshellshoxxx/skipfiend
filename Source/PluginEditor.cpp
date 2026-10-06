@@ -465,7 +465,7 @@ VERSION, LICENCE AND LINKS
             installed plugin.
   Homepage  )MANUAL" SKIPFIEND_HOMEPAGE R"MANUAL(
   Source    )MANUAL" SKIPFIEND_GITHUB R"MANUAL(
-  Support   )MANUAL" SKIPFIEND_SUPPORT_EMAIL R"MANUAL(
+  Support   )MANUAL" SKIPFIEND_SUPPORT_CONTACT R"MANUAL(
 )MANUAL";
 
 //==============================================================================
@@ -1409,7 +1409,7 @@ SkipfiendAudioProcessorEditor::DebugOverlay::DebugOverlay()
         "keeps writing; if the plugin goes down, the crash lands in it. Leave it on, "
         "reproduce the crash, then send the file.\n"
         "Both are written to Documents/SKIPFIEND/Diagnostics. If SKIPFIEND keeps crashing, "
-        "send BOTH to " SKIPFIEND_SUPPORT_EMAIL " with a description of what you did.",
+        "send BOTH to " SKIPFIEND_SUPPORT_CONTACT " with a description of what you did.",
         juce::dontSendNotification);
     addAndMakeVisible (note);
 
@@ -1978,7 +1978,7 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
                 "Crash logging on",
                 "Writing to:\n" + proc.getCrashLogFile().getFullPathName()
                     + "\n\nLeave this on, reproduce the crash, then send that file to "
-                      SKIPFIEND_SUPPORT_EMAIL " along with the troubleshooting file.",
+                      SKIPFIEND_SUPPORT_CONTACT " along with the troubleshooting file.",
                 "OK");
     };
 
@@ -2455,11 +2455,11 @@ void SkipfiendAudioProcessorEditor::showAbout()
         "SKIPFIEND " SKIPFIEND_VERSION,
         "SKIPFIEND  -  playback failure unit\n"
         "Version " SKIPFIEND_VERSION "\n"
-        "(c) FiendAudio\n\n"
+        "(c) Circuit Drift Labs\n\n"
         "Licence:   one seat per user, see LICENCE.txt in the install folder.\n"
         "Homepage:  " SKIPFIEND_HOMEPAGE "\n"
         "Source:    " SKIPFIEND_GITHUB "\n"
-        "Support:   " SKIPFIEND_SUPPORT_EMAIL "\n\n"
+        "Support:   " SKIPFIEND_SUPPORT_CONTACT "\n\n"
         "Press HELP for the full manual, troubleshooting and install notes.",
         "OK");
 }
