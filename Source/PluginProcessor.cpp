@@ -188,8 +188,7 @@ void SkipfiendAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     timeSuspended = false;
     srcRmsEnv = wetRmsEnv = 0.0f;
     normGain = 1.0f;
-    recorded.clear();
-    recorded.reserve (4096);
+    recordedCount.store (0, std::memory_order_release);
     transport.prepareToPlay (samplesPerBlock, sampleRate);
 }
 
@@ -392,6 +391,8 @@ void SkipfiendAudioProcessor::configureEngine (int e, skf::RepeatParams& rp, dou
             rp.timewarp  = 0.0;
             rp.flavor    = 0;
             rp.endMode   = 0;
+            rp.playMode  = 0;
+            rp.motion    = 0.0;
             break;
 
         case skf::GATESTUT:
@@ -523,9 +524,14 @@ int SkipfiendAudioProcessor::fireEngine (int e, long long anchorAbs, double bpm,
     logEvent (e, code, rp);
     lastEngineFired.store (e);
 
-    // record for Skip-to-MIDI
+    // record for Skip-to-MIDI without allocating on the audio thread
     const double ppq = lastPpq + (double) (anchorAbs - (roll.now())) / beatS;
-    if (recorded.size() < 8000) recorded.push_back ({ juce::jmax (0.0, ppq), e, rp.repeats });
+    const int eventIndex = recordedCount.load (std::memory_order_relaxed);
+    if (eventIndex < kMaxRecordedEvents)
+    {
+        recorded[(size_t) eventIndex] = { juce::jmax (0.0, ppq), e, rp.repeats };
+        recordedCount.store (eventIndex + 1, std::memory_order_release);
+    }
 
     float cl = chaosLog.load();
     chaosLog.store (juce::jlimit (0.0f, 1.0f, cl + 0.18f));
@@ -634,9 +640,7 @@ void SkipfiendAudioProcessor::loadSampleFile (const juce::File& f)
     auto* rawReader = formatManager.createReaderFor (f);
     if (rawReader == nullptr) return;
 
-    // a new sample/track starts from a clean slate
-    resetAllToDefaults();
-
+    // Loading source material must not alter the user's current effect design.
     auto newSource = std::make_unique<juce::AudioFormatReaderSource> (rawReader, true);
     newSource->setLooping (sampleLoop.load());
 
@@ -731,6 +735,8 @@ void SkipfiendAudioProcessor::randomizeSkipParams()
     setNative (P::volEnv,  (float) r.nextInt (5));
     setNative (P::panWalk, (float) r.nextInt (4));
     setNative (P::endMode, (float) r.nextInt (5));
+    setNative (P::playMode, (float) r.nextInt (6));
+    setNorm   (P::motion, 0.2f + r.nextFloat() * 0.8f);
 
     setNorm (P::density,   0.2f + r.nextFloat() * 0.6f);
     setNorm (P::chaos,     r.nextFloat() * 0.7f);
@@ -1683,9 +1689,6 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     if (! playing) phaseSamples += n;
     globalSample += n;
 
-    // ---- one-shot editor requests ------------------------------------
-    if (requestCapture.exchange (false))    doCapture();
-    if (requestMidiExport.exchange (false)) doMidiExport();
 }
 
 //==============================================================================
@@ -1793,8 +1796,11 @@ void SkipfiendAudioProcessor::doMidiExport()
 {
     juce::MidiMessageSequence seq;
     const int ticksPerQuarter = 960;
-    for (const auto& ev : recorded)
+    const int count = juce::jlimit (0, kMaxRecordedEvents,
+                                    recordedCount.load (std::memory_order_acquire));
+    for (int i = 0; i < count; ++i)
     {
+        const auto ev = recorded[(size_t) i];
         const int note = 36 + ev.engine;                       // C1 + engine index
         const double t0 = ev.ppq * ticksPerQuarter;
         const double t1 = t0 + juce::jmax (60.0, ev.repeats * 30.0);
