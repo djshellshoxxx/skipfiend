@@ -139,8 +139,8 @@ public:
     // The effect ONLY runs while the gate is open, and the gate is only opened
     // by a held MIDI note, the TRIGGER button, or the RANDOM TRIGGER button.
     void resetAllToDefaults();
-    void engageRandomTrigger();     // randomise everything + slam to full wet
-    void releaseRandomTrigger();    // restore the mix that was set before engaging
+    void engageRandomTrigger();     // randomise everything + engage full-wet performance override
+    void releaseRandomTrigger();    // release performance override without changing MIX
     void setManualTrigger (bool held);   // the TRIGGER button
     bool isRandomTriggerEngaged() const noexcept { return randomTriggerEngaged.load(); }
     bool isManualTriggerHeld() const noexcept    { return manualTriggerHeld.load(); }
@@ -298,7 +298,6 @@ private:
     int  triggerVoiceIndex = -1;      // the button's own cycling voice
     bool triggerStarted = false;
     bool gateWasOpen = false;                     // audio thread only, edge detect
-    float savedMixBeforeManualTrigger = 1.0f;     // message thread only
 
     // ---- overlay effects --------------------------------------------------
     std::array<std::atomic<bool>, NUM_OVERLAYS> overlayHeld { };
@@ -325,7 +324,6 @@ private:
     std::vector<double> tapTimes;
     std::atomic<double> currentBpm { 120.0 };     // resolved tempo (host or manual), for the UI
     std::atomic<bool> followingHostBpm { false }; // whether the host is actually supplying it
-    float savedMixBeforeMidiHold = 1.0f;          // audio thread only
 
     // ---- RUIN, the hidden effect (audio thread only) -----------------------
     float ruinPhase = 0.0f, ruinStep = 1.0f;
@@ -341,7 +339,6 @@ private:
     juce::MemoryBlock abSlot[2];
     int  currentSlot = 0;
     bool hasRandomised = false;
-    float savedMixBeforeRandomTrigger = 1.0f;     // message thread only
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SkipfiendAudioProcessor)
 };
