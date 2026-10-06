@@ -1772,8 +1772,10 @@ void SkipfiendAudioProcessor::setStateInformation (const void* data, int size)
             {
                 for (int i = 0; i < kSeqSteps; ++i)
                 {
-                    seqEngine[i].store  ((int) seq.getProperty ("e" + juce::String (i), seqEngine[i].load()));
-                    seqRepeats[i].store ((int) seq.getProperty ("r" + juce::String (i), 8));
+                    const int engine = (int) seq.getProperty ("e" + juce::String (i), seqEngine[i].load());
+                    const int repeats = (int) seq.getProperty ("r" + juce::String (i), 8);
+                    seqEngine[i].store  (juce::jlimit (-1, (int) skf::NUM_ENGINES - 1, engine));
+                    seqRepeats[i].store (juce::jlimit (1, 128, repeats));
                 }
                 tree.removeChild (seq, nullptr);
             }
