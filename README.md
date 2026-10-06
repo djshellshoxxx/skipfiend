@@ -85,9 +85,13 @@ Per-retrigger, independent:
 - **Timewarp** — −1 (burst decelerates to ~0.2×) … +1 (accelerates to 4×) across the burst; independent of pitch, so it reads as a time-stretch/rate ramp (the Squarepusher accelerating repeat)
 - **Volume Envelope** — Flat / Decay / Swell / Tremolo / Ducked
 - **Pan Walk** — Static / Alternate / Random / Widen over the burst
+- **Playback Style** — Classic / Stutter Edit / Ping-Pong / Scatter / Orbit / Evolve. This is a phrase-level playback layer above the engine: it can reverse selected repeats, jump to nearby fragments, breathe the playback rate and move the burst through the stereo field instead of replaying every glitch in one direction.
+- **Motion** — 0–100% depth for Playback Style. At 0 the selected mode is restrained; higher settings increase direction changes, fragment displacement, rate movement and stereo travel.
 - **End Behaviour** — Hard Cut / Tail Out / Glitch Click / Seek Noise / Silence · Resume
 
 Classic moves without preset-hunting: SOPHIE ascending burst (Pitch = Ascending, Step ≈ +2), Aphex fill (RATCHET + Decay), trip-hop 3-repeat tail (Repeats Min/Max = 3, End = Tail Out).
+
+For a more animated edit, select **Stutter Edit** or **Evolve** and raise **Motion**. **Classic** preserves the original straight repeat behavior for compatibility with existing presets.
 
 ## Master controls
 
