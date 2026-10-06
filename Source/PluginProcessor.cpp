@@ -1755,7 +1755,7 @@ void SkipfiendAudioProcessor::setStateInformation (const void* data, int size)
     if (auto xml = getXmlFromBinary (data, size))
     {
         auto tree = juce::ValueTree::fromXml (*xml);
-        if (tree.isValid())
+        if (tree.isValid() && tree.hasType (apvts.state.getType()))
         {
             auto seq = tree.getChildWithName ("SEQ");
             if (seq.isValid())
@@ -1774,7 +1774,8 @@ void SkipfiendAudioProcessor::setStateInformation (const void* data, int size)
             if (midiTree.isValid())
             {
                 for (auto& mapping : ccToParamIndex) mapping.store (-1, std::memory_order_release);
-                const int count = (int) midiTree.getProperty ("count", 0);
+                const int count = juce::jlimit (0, 128,
+                    (int) midiTree.getProperty ("count", 0));
                 for (int i = 0; i < count; ++i)
                 {
                     const int cc = (int) midiTree.getProperty ("cc" + juce::String (i), -1);
