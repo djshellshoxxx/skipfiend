@@ -28,6 +28,8 @@ namespace P { // parameter ids
     static const char* volEnv       = "volEnv";
     static const char* panWalk      = "panWalk";
     static const char* endMode      = "endMode";
+    static const char* playMode     = "playMode";
+    static const char* motion       = "motion";
     static const char* scTrigger    = "scTrigger";
     static const char* scThresh     = "scThresh";
     static const char* seqOn        = "seqOn";
@@ -115,6 +117,9 @@ APVTS::ParameterLayout SkipfiendAudioProcessor::makeLayout()
         { "Static", "Alternate", "Random", "Widen" }, 0);
     pc (P::endMode,   "End Behaviour",
         { "Hard Cut", "Tail Out", "Glitch Click", "Seek Noise", "Silence / Resume" }, 3);
+    pc (P::playMode,  "Playback Style",
+        { "Classic", "Stutter Edit", "Ping-Pong", "Scatter", "Orbit", "Evolve" }, 0);
+    pf (P::motion,    "Playback Motion", FR (0.0f, 1.0f), 0.65f);
 
     // overlay effect rates: how fast each repeats relative to the grid
     const juce::StringArray rateNames { "1x", "2x", "4x", "8x", "16x" };
@@ -251,6 +256,8 @@ void SkipfiendAudioProcessor::applyLiveParamsToVoice (skf::RepeatVoice& v, float
         v.p.timewarp      = cachedParam (P::timewarp);
         v.p.volEnv        = (int) cachedParam (P::volEnv);
         v.p.panWalk       = (int) cachedParam (P::panWalk);
+        v.p.playMode      = (int) cachedParam (P::playMode);
+        v.p.motion        = cachedParam (P::motion);
         v.p.wet           = cachedParam (P::amt (v.engine()).toRawUTF8());
     }
 
@@ -260,6 +267,8 @@ void SkipfiendAudioProcessor::applyLiveParamsToVoice (skf::RepeatVoice& v, float
     {
         v.p.pitchMode = rng.nextInt (5);
         v.p.panWalk   = rng.nextInt (4);
+        if (v.p.playMode != 0 && rng.nextFloat() < chaosAmt * 0.35f)
+            v.p.playMode = 1 + rng.nextInt (5);
         v.p.timewarp  = juce::jlimit (-1.0, 1.0, v.p.timewarp
                             + (rng.nextDouble() * 2.0 - 1.0) * 0.5 * chaosAmt);
     }
@@ -310,6 +319,8 @@ void SkipfiendAudioProcessor::configureEngine (int e, skf::RepeatParams& rp, dou
     rp.volEnv        = (int) cachedParam (P::volEnv);
     rp.panWalk       = (int) cachedParam (P::panWalk);
     rp.endMode       = (int) cachedParam (P::endMode);
+    rp.playMode      = (int) cachedParam (P::playMode);
+    rp.motion        = cachedParam (P::motion);
     rp.timewarp      = cachedParam (P::timewarp);
     rp.wet           = cachedParam (P::amt (e).toRawUTF8());
     rp.flavor = 0; rp.gate = false; rp.driftMsPerRep = 0.0; rp.bufferSilence = 0.0;
@@ -432,6 +443,8 @@ int SkipfiendAudioProcessor::fireEngine (int e, long long anchorAbs, double bpm,
         rp.volEnv        = rng.nextInt (5);
         rp.panWalk       = rng.nextInt (4);
         rp.endMode       = rng.nextInt (5);
+        rp.playMode      = 1 + rng.nextInt (5);
+        rp.motion        = 0.35 + rng.nextDouble() * 0.65;
         rp.wet           = 0.65 + rng.nextDouble() * 0.35;
         rp.randomised    = true;
         if (repOverride <= 0) rp.repeats = 2 + rng.nextInt (14);
