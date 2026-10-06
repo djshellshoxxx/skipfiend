@@ -2,7 +2,7 @@
 
 namespace col
 {
-    // === VISUAL IDENTITY SPEC (theme.md) -- FiendAudio house palette ===
+    // === VISUAL IDENTITY SPEC (theme.md) -- Circuit Drift Labs house palette ===
     // Neutrals, layout and control shapes are shared by every plugin; only one
     // accent may be re-tinted per plugin for its own identity.
     static const juce::Colour bg      { 0xff0e1116 };   // background base
