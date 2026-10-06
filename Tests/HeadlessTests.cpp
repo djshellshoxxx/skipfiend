@@ -729,6 +729,35 @@ int main()
             check (runBlocks (*p, 6, 512, r, 60), "full state after truncated ones");
         }
 
+        // valid JUCE binary XML with the wrong root type must be ignored
+        {
+            const auto beforeWrongRoot = stateToString (*p);
+            juce::ValueTree wrong ("NOT_PARAMS");
+            wrong.setProperty ("garbage", 123, nullptr);
+            juce::MemoryBlock wrongBlob;
+            if (auto xml = wrong.createXml())
+                juce::AudioProcessor::copyXmlToBinary (*xml, wrongBlob);
+            p->setStateInformation (wrongBlob.getData(), (int) wrongBlob.getSize());
+            check (stateToString (*p) == beforeWrongRoot,
+                   "state restore rejects a valid blob with the wrong root type");
+        }
+
+        // A forged mapping count must be bounded; only 128 MIDI CCs exist.
+        {
+            auto state = p->apvts.copyState();
+            auto midiTree = juce::ValueTree ("MIDILEARN");
+            midiTree.setProperty ("count", 1000000000, nullptr);
+            midiTree.setProperty ("cc0", 7, nullptr);
+            midiTree.setProperty ("id0", "mix", nullptr);
+            state.appendChild (midiTree, nullptr);
+            juce::MemoryBlock hostileMidi;
+            if (auto xml = state.createXml())
+                juce::AudioProcessor::copyXmlToBinary (*xml, hostileMidi);
+            p->setStateInformation (hostileMidi.getData(), (int) hostileMidi.getSize());
+            check (p->getMappedCcFor ("mix") == 7,
+                   "hostile MIDI mapping count is bounded and valid mappings still load");
+        }
+
         // structurally valid state with hostile sequencer values
         {
             p->seqEngine[0].store (999);
