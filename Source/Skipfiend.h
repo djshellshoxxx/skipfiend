@@ -423,7 +423,7 @@ struct RepeatVoice
         *outR += orr * (float) p.wet;
 
         pos += rate * rateScale;
-        if (pos >= curLen)
+        while (pos >= curLen && active && ! tailing)
         {
             pos -= curLen;
             if (p.driftMsPerRep != 0.0)
