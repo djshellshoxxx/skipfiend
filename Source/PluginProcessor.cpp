@@ -1970,7 +1970,7 @@ juce::String SkipfiendAudioProcessor::buildTroubleshootingReport()
 
     r << juce::newLine << "LICENCE" << juce::newLine << "-------" << juce::newLine
       << "  One seat per user. See LICENCE.txt beside the installed plugin." << juce::newLine
-      << "  Support: " << SKIPFIEND_SUPPORT_EMAIL << juce::newLine
+      << "  Support: " << SKIPFIEND_SUPPORT_CONTACT << juce::newLine
       << "  Homepage: " << SKIPFIEND_HOMEPAGE << juce::newLine;
 
     return r;
