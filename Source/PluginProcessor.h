@@ -88,9 +88,8 @@ public:
 
     const skf::RollingBuffer& rolling() const noexcept { return roll; }
 
-    // one-shot actions from the editor
-    std::atomic<bool> requestCapture   { false };
-    std::atomic<bool> requestMidiExport { false };
+    // one-shot file actions. These are called from UI/message-thread callbacks,
+    // never from processBlock: state serialization and filesystem I/O are not RT-safe.
     void doCapture();
     void doMidiExport();
 
@@ -243,9 +242,13 @@ private:
     float scEnv = 0.0f, scPrev = 0.0f;
     int   scHold = 0;
 
-    // recorded trigger events for Skip-to-MIDI
-    struct TrigEvt { double ppq; int engine; int repeats; };
-    std::vector<TrigEvt> recorded;
+    // recorded trigger events for Skip-to-MIDI. Fixed-capacity storage avoids
+    // allocator activity on the audio thread and makes export snapshots safe:
+    // an event is fully written before recordedCount is published.
+    struct TrigEvt { double ppq = 0.0; int engine = 0; int repeats = 0; };
+    static constexpr int kMaxRecordedEvents = 8000;
+    std::array<TrigEvt, kMaxRecordedEvents> recorded {};
+    std::atomic<int> recordedCount { 0 };
     double lastPpq = 0.0;
 
     // ---- test-sample deck --------------------------------------------------
