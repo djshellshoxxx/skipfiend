@@ -180,6 +180,21 @@ struct RepeatParams
 // ----------------------------------------------------------------------------
 //  A single retrigger voice.
 // ----------------------------------------------------------------------------
+inline void enforceRecordSkipVerbatim (RepeatParams& p) noexcept
+{
+    p.lenMode = 0;
+    p.pitchMode = 0;
+    p.basePitchSemi = 0.0;
+    p.pitchPerRep = 0.0;
+    p.volEnv = 0;
+    p.panWalk = 0;
+    p.timewarp = 0.0;
+    p.flavor = 0;
+    p.gate = false;
+    p.playMode = 0;
+    p.motion = 0.0;
+}
+
 struct RepeatVoice
 {
     void start (long long startAbs, const RepeatParams& pp, int eng, double sampleRate)
