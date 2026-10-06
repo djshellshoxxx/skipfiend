@@ -200,6 +200,8 @@ void SkipfiendAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     timeSuspended = false;
     srcRmsEnv = wetRmsEnv = 0.0f;
     normGain = 1.0f;
+    scEnv = scPrev = 0.0f;
+    scHold = 0;
     recordedCount.store (0, std::memory_order_release);
     transport.prepareToPlay (samplesPerBlock, sampleRate);
 }
@@ -1420,10 +1422,12 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     {
         auto scBuf = getBusBuffer (buffer, true, 1);
         const float thr = juce::Decibels::decibelsToGain (cachedParam (P::scThresh));
-        const float* s0 = scBuf.getReadPointer (0);
+        const int scChannels = juce::jmax (1, scBuf.getNumChannels());
         for (int i = 0; i < n; ++i)
         {
-            const float x = std::abs (s0[i]);
+            float x = 0.0f;
+            for (int ch = 0; ch < scChannels; ++ch)
+                x = juce::jmax (x, std::abs (scBuf.getSample (ch, i)));
             scEnv = juce::jmax (x, scEnv * 0.999f);
             if (scHold > 0) --scHold;
             if (x > thr && x > scPrev * 1.6f && scHold == 0)
