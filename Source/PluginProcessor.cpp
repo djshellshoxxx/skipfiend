@@ -36,14 +36,25 @@ namespace P { // parameter ids
     static const char* bypass       = "bypass";
     static const char* bpmSync      = "bpmSync";
     static const char* manualBpm    = "manualBpm";
-    static juce::String rate (int e) { return "rate_" + juce::String (e); }
     static const char* echoRate     = "echoRate";
     static const char* delayRate    = "delayRate";
     static const char* dubRate      = "dubRate";
     static const char* revBars      = "revBars";
-    static juce::String en   (int e) { return "en_"   + juce::String (e); }
-    static juce::String amt  (int e) { return "amt_"  + juce::String (e); }
-    static juce::String prob (int e) { return "prob_" + juce::String (e); }
+
+    // Fixed parameter-ID tables: no temporary juce::String construction from
+    // the real-time path when engines are queried or fired.
+    static constexpr const char* enIds[skf::NUM_ENGINES] = {
+        "en_0","en_1","en_2","en_3","en_4","en_5","en_6","en_7","en_8" };
+    static constexpr const char* amtIds[skf::NUM_ENGINES] = {
+        "amt_0","amt_1","amt_2","amt_3","amt_4","amt_5","amt_6","amt_7","amt_8" };
+    static constexpr const char* probIds[skf::NUM_ENGINES] = {
+        "prob_0","prob_1","prob_2","prob_3","prob_4","prob_5","prob_6","prob_7","prob_8" };
+    static constexpr const char* rateIds[skf::NUM_ENGINES] = {
+        "rate_0","rate_1","rate_2","rate_3","rate_4","rate_5","rate_6","rate_7","rate_8" };
+    static const char* en   (int e) { return enIds  [juce::jlimit (0, (int) skf::NUM_ENGINES - 1, e)]; }
+    static const char* amt  (int e) { return amtIds [juce::jlimit (0, (int) skf::NUM_ENGINES - 1, e)]; }
+    static const char* prob (int e) { return probIds[juce::jlimit (0, (int) skf::NUM_ENGINES - 1, e)]; }
+    static const char* rate (int e) { return rateIds[juce::jlimit (0, (int) skf::NUM_ENGINES - 1, e)]; }
 }
 
 //==============================================================================
@@ -136,13 +147,13 @@ APVTS::ParameterLayout SkipfiendAudioProcessor::makeLayout()
     for (int e = 0; e < skf::NUM_ENGINES; ++e)
     {
         const juce::String nm = skf::engineName (e);
-        pb (P::en (e).toRawUTF8(),   nm + " On",     e == skf::CDSKIP);
-        pf (P::amt (e).toRawUTF8(),  nm + " Amount", FR (0.0f, 1.0f), e == skf::CDSKIP ? 1.0f : 0.7f);
-        pf (P::prob (e).toRawUTF8(), nm + " Prob",   FR (0.0f, 1.0f), e == skf::CDSKIP ? 0.85f : 0.5f);
+        pb (P::en (e),   nm + " On",     e == skf::CDSKIP);
+        pf (P::amt (e),  nm + " Amount", FR (0.0f, 1.0f), e == skf::CDSKIP ? 1.0f : 0.7f);
+        pf (P::prob (e), nm + " Prob",   FR (0.0f, 1.0f), e == skf::CDSKIP ? 0.85f : 0.5f);
         // per-engine LOOP LENGTH, in bars: 1x is a one-bar loop, 32x is a
         // thirty-two-bar loop. Live-applied, so turning it mid-hold widens or
         // tightens the loop that is already playing.
-        pc (P::rate (e).toRawUTF8(), nm + " Loop",
+        pc (P::rate (e), nm + " Loop",
             { "1x", "2x", "3x", "4x", "6x", "8x", "12x", "16x", "24x", "32x" }, 0);
     }
 
@@ -218,9 +229,9 @@ int SkipfiendAudioProcessor::pickEngineWeighted (juce::Random& r)
     double w[skf::NUM_ENGINES]; double sum = 0.0;
     for (int e = 0; e < skf::NUM_ENGINES; ++e)
     {
-        const bool on = cachedParam (P::en (e).toRawUTF8()) > 0.5f;
-        w[e] = on ? (double) cachedParam (P::amt (e).toRawUTF8())
-                        * (double) cachedParam (P::prob (e).toRawUTF8()) + 1.0e-4 : 0.0;
+        const bool on = cachedParam (P::en (e)) > 0.5f;
+        w[e] = on ? (double) cachedParam (P::amt (e))
+                        * (double) cachedParam (P::prob (e)) + 1.0e-4 : 0.0;
         sum += w[e];
     }
     if (sum <= 0.0) return -1;
@@ -233,14 +244,14 @@ int SkipfiendAudioProcessor::randomEnabledEngine (juce::Random& r)
 {
     int on[skf::NUM_ENGINES]; int c = 0;
     for (int e = 0; e < skf::NUM_ENGINES; ++e)
-        if (cachedParam (P::en (e).toRawUTF8()) > 0.5f) on[c++] = e;
+        if (cachedParam (P::en (e)) > 0.5f) on[c++] = e;
     return c ? on[r.nextInt (c)] : -1;
 }
 
 double SkipfiendAudioProcessor::engineLoopBarsFor (int e) const
 {
     static const double kBars[] = { 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0 };
-    const int idx = juce::jlimit (0, 9, (int) cachedParam (P::rate (e).toRawUTF8()));
+    const int idx = juce::jlimit (0, 9, (int) cachedParam (P::rate (e)));
     return kBars[idx];
 }
 
@@ -258,7 +269,7 @@ void SkipfiendAudioProcessor::applyLiveParamsToVoice (skf::RepeatVoice& v, float
         v.p.panWalk       = (int) cachedParam (P::panWalk);
         v.p.playMode      = (int) cachedParam (P::playMode);
         v.p.motion        = cachedParam (P::motion);
-        v.p.wet           = cachedParam (P::amt (v.engine()).toRawUTF8());
+        v.p.wet           = cachedParam (P::amt (v.engine()));
 
         if (v.engine() == skf::RECSKIP)
             skf::enforceRecordSkipVerbatim (v.p);
@@ -325,7 +336,7 @@ void SkipfiendAudioProcessor::configureEngine (int e, skf::RepeatParams& rp, dou
     rp.playMode      = (int) cachedParam (P::playMode);
     rp.motion        = cachedParam (P::motion);
     rp.timewarp      = cachedParam (P::timewarp);
-    rp.wet           = cachedParam (P::amt (e).toRawUTF8());
+    rp.wet           = cachedParam (P::amt (e));
     rp.flavor = 0; rp.gate = false; rp.driftMsPerRep = 0.0; rp.bufferSilence = 0.0;
 
     switch (e)
@@ -741,12 +752,12 @@ void SkipfiendAudioProcessor::randomizeSkipParams()
     for (int e = 0; e < skf::NUM_ENGINES; ++e)
     {
         const bool on = r.nextFloat() < 0.42f;
-        setNative (P::en (e).toRawUTF8(), on ? 1.0f : 0.0f);
+        setNative (P::en (e), on ? 1.0f : 0.0f);
         if (on) ++numOn;
-        setNorm (P::amt (e).toRawUTF8(),  0.35f + r.nextFloat() * 0.65f);
-        setNorm (P::prob (e).toRawUTF8(), 0.25f + r.nextFloat() * 0.75f);
+        setNorm (P::amt (e),  0.35f + r.nextFloat() * 0.65f);
+        setNorm (P::prob (e), 0.25f + r.nextFloat() * 0.75f);
     }
-    if (numOn == 0) setNative (P::en (skf::CDSKIP).toRawUTF8(), 1.0f);
+    if (numOn == 0) setNative (P::en (skf::CDSKIP), 1.0f);
 
     setNative (P::repMin, (float) (2 + r.nextInt (6)));
     setNative (P::repMax, (float) (8 + r.nextInt (40)));
@@ -870,9 +881,9 @@ void SkipfiendAudioProcessor::loadFactoryPreset (int index)
         {
             bool isOn = false;
             for (int o : on) if (o == e) isOn = true;
-            setNative (P::en (e).toRawUTF8(),   isOn ? 1.0f : 0.0f);
-            setNorm   (P::amt (e).toRawUTF8(),  0.8f);
-            setNorm   (P::prob (e).toRawUTF8(), 0.7f);
+            setNative (P::en (e),   isOn ? 1.0f : 0.0f);
+            setNorm   (P::amt (e),  0.8f);
+            setNorm   (P::prob (e), 0.7f);
         }
     };
 
