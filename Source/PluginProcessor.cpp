@@ -1062,8 +1062,13 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // reading channel 1 out of a mono buffer is a crash, not a glitch.
     const int mainCh = juce::jmin (2, getMainBusNumOutputChannels(), buffer.getNumChannels());
 
-    // clear any output channels beyond what we use
-    for (int c = mainCh; c < nch; ++c) buffer.clear (c, 0, n);
+    // Clear only output-only channels. Channels beyond the main output may
+    // belong to input buses such as the sidechain and must remain intact until
+    // those buses are read later in this callback.
+    const int totalIn  = getTotalNumInputChannels();
+    const int totalOut = getTotalNumOutputChannels();
+    for (int c = totalIn; c < juce::jmin (totalOut, nch); ++c)
+        buffer.clear (c, 0, n);
 
     if (isEffectBypassed())
     {
