@@ -392,6 +392,9 @@ int main()
         }
 
         check (sane, "40 consecutive DICE presses stay finite");
+        check (p->apvts.getParameter ("playMode") != nullptr
+                   && p->apvts.getParameter ("motion") != nullptr,
+               "DICE-capable state includes playback style and motion controls");
 
         // the hidden effect must not be exposed by randomising
         auto* ruin = p->apvts.getParameter ("ruinOn");
@@ -538,7 +541,18 @@ int main()
                            .getChildFile ("nope.txt")),
                    "a .txt is rejected");
 
+            // Loading source material must not wipe the sound the user just designed.
+            if (auto* motion = p->apvts.getParameter ("motion"))
+                motion->setValueNotifyingHost (0.91f);
+            if (auto* mode = p->apvts.getParameter ("playMode"))
+                mode->setValueNotifyingHost (mode->convertTo0to1 (5.0f));
+            const float motionBeforeLoad = p->apvts.getParameter ("motion")->getValue();
+            const float modeBeforeLoad = p->apvts.getParameter ("playMode")->getValue();
+
             p->loadSampleFile (wav);
+            check (std::abs (p->apvts.getParameter ("motion")->getValue() - motionBeforeLoad) < 1.0e-6f
+                       && std::abs (p->apvts.getParameter ("playMode")->getValue() - modeBeforeLoad) < 1.0e-6f,
+                   "loading a sample preserves the current effect design");
             check (p->isSampleLoaded(), "sample loads");
             check (p->getSampleName().isNotEmpty(), "sample reports a name");
             check (p->getSampleLengthSeconds() > 0.0, "sample reports a length");
