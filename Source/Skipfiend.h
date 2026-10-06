@@ -171,6 +171,7 @@ struct RepeatParams
     double wet           = 1.0;
     double driftMsPerRep = 0.0; // STICK drift
     int    flavor        = 0;   // 0 none 1 mp3 2 tape 3 buffer-underrun
+    bool   tapeReverse   = false; // TAPE DROPOUT: reverse the recovery tail
     bool   gate          = false;
     double bufferSilence = 0.0; // 0..1 fraction of burst muted (BUFFER UNDERRUN)
     bool   loopBurst     = false; // when the burst ends, start it again from the top
@@ -389,6 +390,16 @@ struct RepeatVoice
 
         if (direction < 0.0)
             localPos = juce::jmax (0.0, curLen - 1.0 - pos);
+
+        // TAPE DROPOUT recovery: the final quarter of the last repeat can
+        // physically run backward through the captured slice. This replaces
+        // the old display-only reverse hint with actual reversed audio.
+        if (p.flavor == 2 && p.tapeReverse && i == juce::jmax (0, p.repeats - 1))
+        {
+            const double recoveryStart = curLen * 0.75;
+            if (pos >= recoveryStart)
+                localPos = juce::jmax (0.0, curLen - 1.0 - pos);
+        }
 
         const double rate = pitchRatioFor (i) * timewarpRate (i)
                           * juce::jlimit (0.20, 4.0, choreographyRate);
