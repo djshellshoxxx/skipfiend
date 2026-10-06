@@ -366,6 +366,7 @@ void SkipfiendAudioProcessor::configureEngine (int e, skf::RepeatParams& rp, dou
 
         case skf::TAPEDO:
             rp.flavor = 2;
+            rp.tapeReverse = rng.nextFloat() < 0.35f;
             rp.repeats = 2 + rng.nextInt (5);
             if (rp.volEnv == 0) rp.volEnv = 4; // ducked
             rp.sliceMinS = juce::jlimit (0.060, 0.320, rp.sliceMinS);
@@ -516,7 +517,7 @@ int SkipfiendAudioProcessor::fireEngine (int e, long long anchorAbs, double bpm,
     const int vi = allocVoiceIndex();
     voices[(size_t) vi].start (anchor, rp, e, sr);
     voiceLayer[(size_t) vi] = layer;
-    pushFlash (e, e == skf::TAPEDO && rng.nextFloat() < 0.35f);
+    pushFlash (e, e == skf::TAPEDO && rp.tapeReverse);
     logEvent (e, code, rp);
     lastEngineFired.store (e);
 
