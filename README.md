@@ -103,7 +103,7 @@ For a more animated edit, select **Stutter Edit** or **Evolve** and raise **Moti
 ## Features
 
 - **Skip Language sequencer** — 16 cells at the bottom of the UI. Click a cell to cycle which engine fires there (or off); mouse-wheel to set its repeat count. When **SKIP LANGUAGE** is on it drives triggering instead of the density/chaos dice.
-- **MIDI Trigger Mode** — note number mod 8 selects an engine, velocity scales the repeat count. Route MIDI to the plugin and play the failure.
+- **MIDI performance** — white keys select deterministic failure engines, black keys invoke a random failure, and octave selects the retrigger subdivision (1x / 4x / 8x / 16x / 32x). Multiple held keys can layer/chains effects.
 - **Sidechain Trigger** — enable the Sidechain bus; a transient above `SC Threshold` fires a weighted engine on the main signal (kick, hat or vocal driving the skips).
 - **Recovery Artifacts** — dials in the seek click / laser hunt / buffer-fill hiss / tape-stop wobble that plays between skips, matched to the engine that just recovered.
 - **CAPTURE** — writes the current full state to `~/Documents/SKIPFIEND/capture_*.skipfiend` before it drifts away.
@@ -124,7 +124,7 @@ For a more animated edit, select **Stutter Edit** or **Evolve** and raise **Moti
 | `Source/PluginProcessor.*` | parameters, transport/grid/sequencer/sidechain/MIDI triggering, engine configuration, voice pool, dry/wet crossfade, state, capture, MIDI export |
 | `Source/PluginEditor.*` | the UI: `FiendLNF` look and feel implementing the house visual identity, `WaveformDisplay`, engine strip, Repeat Engine + Master panels, Skip Language cells, and the Help / Options / Debug overlays |
 | `Tests/HeadlessTests.cpp` | headless test harness (off by default, see **Tests**) |
-| `theme.md` / `include.md` | the shared visual identity spec and the checklist every FiendAudio plugin implements |
+| `theme.md` / `include.md` | the shared visual identity spec and the checklist every Circuit Drift Labs plugin implements |
 
 ## Status
 
