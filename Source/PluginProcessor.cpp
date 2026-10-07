@@ -72,14 +72,17 @@ SkipfiendAudioProcessor::SkipfiendAudioProcessor()
     }
     for (auto& s : logRing) { s.a.store (0); s.b.store (0); }
     for (auto& mapping : ccToParamIndex) mapping.store (-1);
+    for (auto& v : pendingCcValue) v.store (-1.0f);
     voices.resize (16);          // polyphonic keys can each want voices at once
     voiceLayer.assign (voices.size(), 0);
     formatManager.registerBasicFormats();
     readAheadThread.startThread();
+    startTimerHz (60);   // applies MIDI-learned CCs off the audio thread
 }
 
 SkipfiendAudioProcessor::~SkipfiendAudioProcessor()
 {
+    stopTimer();
     transport.setSource (nullptr);
     readAheadThread.stopThread (2000);
 }
@@ -182,7 +185,7 @@ void SkipfiendAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     // long enough to hold a 32-bar reverse loop at typical tempos, or the whole
     // track when FULL BUFFER is on
     roll.prepare (sampleRate, 2, juce::jmax (64.0, bufferedSeconds.load()));
-    chainRoll.prepare (sampleRate, 2, 8.0);   // only needs recent history
+    chainRoll.prepare (sampleRate, 2, 64.0);  // layered keys loop up to the same length as layer 0
     fxRoll.prepare (sampleRate, 2, 64.0);     // REVERSE can reach back 32 bars
     voiceLayer.assign (voices.size(), 0);
     artifacts.prepare (sampleRate);
@@ -272,9 +275,6 @@ void SkipfiendAudioProcessor::applyLiveParamsToVoice (skf::RepeatVoice& v, float
         v.p.playMode      = (int) cachedParam (P::playMode);
         v.p.motion        = cachedParam (P::motion);
         v.p.wet           = cachedParam (P::amt (v.engine()));
-
-        if (v.engine() == skf::RECSKIP)
-            skf::enforceRecordSkipVerbatim (v.p);
     }
 
     // CHAOS keeps working while you hold: every so often it re-rolls the
@@ -288,6 +288,10 @@ void SkipfiendAudioProcessor::applyLiveParamsToVoice (skf::RepeatVoice& v, float
         v.p.timewarp  = juce::jlimit (-1.0, 1.0, v.p.timewarp
                             + (rng.nextDouble() * 2.0 - 1.0) * 0.5 * chaosAmt);
     }
+
+    // last word: neither the knobs, a black key nor CHAOS may bend RECORD SKIP
+    if (v.engine() == skf::RECSKIP)
+        skf::enforceRecordSkipVerbatim (v.p);
 }
 
 int SkipfiendAudioProcessor::allocVoiceIndex()
@@ -524,8 +528,12 @@ int SkipfiendAudioProcessor::fireEngine (int e, long long anchorAbs, double bpm,
         lastLoopResumePos = anchorAbs;
     }
 
-    const long long minA = roll.now() - (long long) roll.len + 4096;
+    const long long minA = roll.now() - (long long) (layer > 0 ? chainRoll.len : roll.len) + 4096;
     anchor = juce::jlimit (minA, roll.now() - 8, anchor);
+
+    // chaos / black-key feel above must not bend RECORD SKIP either
+    if (e == skf::RECSKIP)
+        skf::enforceRecordSkipVerbatim (rp);
 
     const int vi = allocVoiceIndex();
     voices[(size_t) vi].start (anchor, rp, e, sr);
@@ -535,7 +543,8 @@ int SkipfiendAudioProcessor::fireEngine (int e, long long anchorAbs, double bpm,
     lastEngineFired.store (e);
 
     // record for Skip-to-MIDI without allocating on the audio thread
-    const double ppq = lastPpq + (double) (anchorAbs - (roll.now())) / beatS;
+    // lastPpq is the PPQ of the block's first sample, which is blockBaseNow
+    const double ppq = lastPpq + (double) (anchorAbs - blockBaseNow) / beatS;
     const int eventIndex = recordedCount.load (std::memory_order_relaxed);
     if (eventIndex < kMaxRecordedEvents)
     {
@@ -628,10 +637,23 @@ void SkipfiendAudioProcessor::handleMidiCC (int cc, float v01)
         return;
     }
 
-    const int target = ccToParamIndex[(size_t) cc].load (std::memory_order_acquire);
+    // setValueNotifyingHost takes listener locks and calls listeners
+    // synchronously, so the audio thread only posts the latest value per CC
+    if (ccToParamIndex[(size_t) cc].load (std::memory_order_acquire) >= 0)
+        pendingCcValue[(size_t) cc].store (juce::jlimit (0.0f, 1.0f, v01), std::memory_order_release);
+}
+
+void SkipfiendAudioProcessor::flushPendingMidiCC()
+{
     const auto& params = getParameters();
-    if (target >= 0 && target < params.size())
-        params[target]->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, v01));
+    for (int cc = 0; cc < 128; ++cc)
+    {
+        const float v = pendingCcValue[(size_t) cc].exchange (-1.0f, std::memory_order_acq_rel);
+        if (v < 0.0f) continue;
+        const int target = ccToParamIndex[(size_t) cc].load (std::memory_order_acquire);
+        if (target >= 0 && target < params.size())
+            params[target]->setValueNotifyingHost (v);
+    }
 }
 
 void SkipfiendAudioProcessor::startMidiLearn (const juce::String& paramId)
@@ -700,10 +722,17 @@ void SkipfiendAudioProcessor::loadSampleFile (const juce::File& f)
         {
             // resizing the buffer the audio thread reads from: hold the callback
             // lock so we can't pull it out from under a processBlock in flight
-            const juce::ScopedLock sl (getCallbackLock());
-            roll.prepare (sr, 2, want);
-            bufferedSeconds.store (want);
-            playheadInit = false;
+            // allocate the big buffer before taking the lock; only the history
+            // copy and the swap happen while the audio thread is held off
+            skf::RollingBuffer bigger;
+            bigger.prepare (sr, 2, want);
+            {
+                const juce::ScopedLock sl (getCallbackLock());
+                bigger.adoptHistoryFrom (roll);   // voices keep their absolute positions
+                std::swap (roll, bigger);
+                bufferedSeconds.store (want);
+                playheadInit = false;
+            }
         }
     }
 
@@ -802,9 +831,9 @@ void SkipfiendAudioProcessor::resetAllToDefaults()
     for (int i = 0; i < NUM_OVERLAYS; ++i) overlayHeld[(size_t) i].store (false);
     resetTapTempo();
 
-    // drop any accumulated loop lag and re-join real time
-    playheadInit = false;
-    timeSuspended = false;
+    // drop any accumulated loop lag and re-join real time (applied by the
+    // audio thread: these fields are owned by processBlock)
+    playheadResyncRequested.store (true);
 }
 
 void SkipfiendAudioProcessor::setOverlayHeld (int overlayId, bool held)
@@ -1132,6 +1161,11 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     if (! playing) ppqStart = phaseSamples / beatS;
     lastPpq = ppqStart;
 
+    // host loop, seek backwards or a switch to the stopped-transport clock:
+    // quantise targets computed on the old timeline must be re-anchored
+    const bool timeJumpedBack = prevBlockPpqEnd >= 0.0 && ppqStart < prevBlockPpqEnd - 1.0e-3;
+    prevBlockPpqEnd = ppqStart + (double) n / beatS;
+
     const int gridIdx     = (int) cachedParam (P::grid);
     const double gBeats   = gridBeatsFor (gridIdx);
     const double gridS    = gBeats * beatS;
@@ -1163,7 +1197,9 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         juce::AudioBuffer<float> dryIn (buffer.getArrayOfWritePointers(), mainCh, n);
         roll.push (dryIn);
     }
+    if (playheadResyncRequested.exchange (false)) { playheadInit = false; timeSuspended = false; }
     const long long baseNow = roll.now() - n;
+    blockBaseNow = baseNow;
 
     // ---- MIDI: polyphonic hold-to-perform + always-on CC -> param map -------
     // Every held key runs its own effect simultaneously. Which effect comes from
@@ -1199,6 +1235,10 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 const bool black = (pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10);
 
                 auto& k = heldKeys[(size_t) slot];
+                // a repeated note-on for a key that is already held: release its
+                // looping voice, otherwise it is orphaned and loops forever
+                if (slot < nHeld && k.note == note && k.voiceIndex >= 0 && k.voiceIndex < (int) voices.size())
+                    voices[(size_t) k.voiceIndex].releaseNow();
                 k.note       = note;
                 k.rateMult   = kRates[octave];
                 k.randomMode = black;
@@ -1287,11 +1327,13 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
         // a bar is 4 beats; the loop can't be longer than the audio we actually hold
         const double barSamples = 4.0 * beatS;
-        const double maxCycle   = (double) roll.len - 8192.0;
 
         for (int i = 0; i < nHeld; ++i)
         {
             auto& k = heldKeys[(size_t) i];
+            // layered keys render from chainRoll, so their loop must fit in it
+            const auto& ring      = k.layer > 0 ? chainRoll : roll;
+            const double maxCycle = (double) ring.len - 8192.0;
             const int slices = juce::jlimit (1, 64, (int) std::lround (k.rateMult));
 
             // still cycling? retune it live from the knobs, but let it finish.
@@ -1314,7 +1356,7 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                     // the back of the rolling buffer -- reads then clamp to the
                     // oldest sample and the loop quietly decays to nothing. Grab a
                     // fresh region instead of letting it wither.
-                    const long long minSafe = roll.now() - (long long) roll.len + 8192;
+                    const long long minSafe = roll.now() - (long long) ring.len + 8192;
                     if (v.sliceStartAbs < minSafe)
                         v.sliceStartAbs = roll.now() - (long long) cyc;
                     continue;
@@ -1327,6 +1369,7 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             if (! k.started)
             {
                 const double stepBeats = juce::jmax (0.015625, gBeats);
+                if (timeJumpedBack) k.pressPpq = ppqStart;
                 const double q = std::ceil (k.pressPpq / stepBeats - 1.0e-9) * stepBeats;
                 if (q > ppqEnd) continue;                  // quantise point not reached yet
                 firePpq = juce::jmax (q, ppqStart);
@@ -1392,15 +1435,18 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         }
     }
 
-    // ---- Skip Language sequencer, while a button is held --------------------
-    // (the sequencer is explicitly step-based, so it stays step-driven)
-    if (buttonHeld && seqOn && ! scOn)
+    // ---- Skip Language sequencer / Density skips, while a button is held -----
+    // (the sequencer is explicitly step-based, so it stays step-driven; with it
+    // off, Density decides how many grid steps add a skip on top of the loop)
+    if (buttonHeld && ! scOn && (seqOn || density > 0.0f))
     {
         const double posStart = ppqStart / gBeats;
         const double posEnd   = posStart + (double) n / gridS;
         const int k0 = (int) std::ceil  (posStart - 1.0e-9);
         const int k1 = (int) std::floor (posEnd   - 1.0e-9);
-        for (int k = k0; k <= k1; ++k)
+        // start one step early: a swung odd step from the previous block can
+        // land inside this one (swing delays by at most half a step)
+        for (int k = k0 - 1; k <= k1; ++k)
         {
             double so = (k - posStart) * gridS;
             if ((k & 1) != 0) so += swing * 0.5 * gridS;
@@ -1418,8 +1464,7 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
             // Density sets how much of the grid gets hit while held; at full
             // density every step fires, so a hold reads as continuous stutter.
-            float pr = std::pow (juce::jlimit (0.0f, 1.0f, density), 1.2f);
-            pr = juce::jlimit (0.25f, 1.0f, pr + 0.25f);
+            const float pr = std::pow (juce::jlimit (0.0f, 1.0f, density), 1.2f);
             if (rng.nextFloat() < pr)
             {
                 int e = pickEngineWeighted (rng);
@@ -1470,6 +1515,9 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 overlayArmed[(size_t) o]  = true;
                 overlayArmPpq[(size_t) o] = nextQuant;
             }
+            // re-anchor after a loop/seek, or the arm point may never be reached
+            if (overlayArmed[(size_t) o] && timeJumpedBack)
+                overlayArmPpq[(size_t) o] = nextQuant;
             if (overlayArmed[(size_t) o] && ppqEnd >= overlayArmPpq[(size_t) o])
             {
                 overlayArmed[(size_t) o]  = false;
@@ -1480,7 +1528,7 @@ void SkipfiendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                     static const double kRevBars[] = { 1.0, 2.0, 4.0, 8.0, 16.0, 32.0 };
                     const int ri = juce::jlimit (0, 5, (int) cachedParam (P::revBars));
                     double win = kRevBars[ri] * 4.0 * beatS;                 // bars -> samples
-                    win = juce::jmin (win, (double) fxRoll.len - 8192.0);    // clamp to what we hold
+                    win = juce::jmin (win, (double) fxRoll.len * 0.5);       // clamp to what we hold
                     reverser.start (fxRoll.now(), win);                      // reverse the EFFECT output
                 }
             }

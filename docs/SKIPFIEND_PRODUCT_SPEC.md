@@ -166,6 +166,8 @@ MIDI Learn maps one CC to one parameter and one parameter to at most one learned
 
 The real-time path uses a fixed 128-entry atomic CC-to-parameter-index table. No mutex, spinlock, map mutation, string allocation or filesystem work is allowed from MIDI handling in `processBlock`.
 
+Incoming learned CC values are posted lock-free (latest value per CC) and applied to parameters by a message-thread timer, because host parameter notification takes listener locks.
+
 Mappings are persisted by stable parameter ID so internal table/index changes do not break saved presets.
 
 ## 12. File operations and real-time safety

@@ -2127,6 +2127,13 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
 
 SkipfiendAudioProcessorEditor::~SkipfiendAudioProcessorEditor()
 {
+    // The window can close while a momentary button is physically held; its
+    // mouseUp will never arrive, so let go here or the gate stays open unseen.
+    // Latched buttons are a deliberate hands-free state and are left alone.
+    for (auto* b : { &triggerBtn, &randomTriggerBtn, &echoBtn, &delayBtn, &dubBtn, &reverseBtn })
+        if (b->isDown() && ! b->latchedOn && b->onRelease)
+            b->onRelease();
+
     setLookAndFeel (nullptr);
     for (auto* s : knobs)  s->setLookAndFeel (nullptr);
     for (auto* c : combos) c->setLookAndFeel (nullptr);
@@ -2234,8 +2241,9 @@ void SkipfiendAudioProcessorEditor::loadSampleViaChooser()
     auto chooser = std::make_shared<juce::FileChooser> ("Load a test sample...", juce::File(),
         "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.caf");
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, chooser] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
             if (file.existsAsFile()) tryLoadSample (file);
         });
@@ -2249,8 +2257,9 @@ void SkipfiendAudioProcessorEditor::savePresetViaChooser()
     auto chooser = std::make_shared<juce::FileChooser> ("Save preset...",
         dir.getChildFile ("Preset.skipfiend"), "*.skipfiend");
     chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
-        [this, chooser] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
             if (file != juce::File())
             {
@@ -2266,8 +2275,9 @@ void SkipfiendAudioProcessorEditor::loadPresetViaChooser()
                    .getChildFile ("SKIPFIEND").getChildFile ("Presets");
     auto chooser = std::make_shared<juce::FileChooser> ("Load preset...", dir, "*.skipfiend");
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, chooser] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
             if (file.existsAsFile())
             {
@@ -2368,8 +2378,9 @@ void SkipfiendAudioProcessorEditor::exportAudioViaChooser (double seconds)
 
     chooser->launchAsync (juce::FileBrowserComponent::saveMode
                             | juce::FileBrowserComponent::warnAboutOverwriting,
-        [this, chooser, seconds] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser, seconds] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
 
             if (file == juce::File())

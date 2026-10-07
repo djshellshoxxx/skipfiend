@@ -411,6 +411,52 @@ int main()
         check (bufferIsSane (buf), "audio remains sane after bypass MIDI release");
     }
 
+    // ---- 5c. a steep ascending pitch step over a 32-slice held loop --------
+    std::cout << "[5c] runaway pitch rate" << std::endl;
+    {
+        p->resetAllToDefaults();
+        auto setNative = [&] (const char* id, float v)
+        { auto* q = p->apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        setNative ("pitchMode", 1.0f);       // Ascending
+        setNative ("pitchPerSkip", 12.0f);   // an octave per repeat
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 72, (juce::uint8) 100), 0);   // CD SKIP, 32 slices
+        bool sane = true;
+        for (int b = 0; b < 1500; ++b)
+        {
+            fillNoise (buf, r);
+            p->processBlock (buf, midi);
+            midi.clear();
+            sane = sane && bufferIsSane (buf);
+        }
+        check (sane, "ascending +12 st held loop stays sane");
+        midi.addEvent (juce::MidiMessage::noteOff (1, 72), 0);
+        p->processBlock (buf, midi);
+    }
+
+    // ---- 5d. Density adds grid skips during a TRIGGER hold ----------------
+    std::cout << "[5d] density" << std::endl;
+    {
+        auto firesWithDensity = [&] (float d)
+        {
+            p->resetAllToDefaults();
+            p->apvts.getParameter ("density")->setValueNotifyingHost (d);
+            juce::AudioBuffer<float> buf (2, 512);
+            juce::MidiBuffer midi;
+            const int before = p->getRecordedEventCount();
+            p->setManualTrigger (true);
+            for (int b = 0; b < 400; ++b) { fillNoise (buf, r); p->processBlock (buf, midi); }
+            p->setManualTrigger (false);
+            p->processBlock (buf, midi);
+            return p->getRecordedEventCount() - before;
+        };
+        const int lo = firesWithDensity (0.0f);
+        const int hi = firesWithDensity (1.0f);
+        check (hi > lo, "Density 1 fires more skips than Density 0 during a hold ("
+                          + juce::String (lo) + " vs " + juce::String (hi) + ")");
+    }
+
     // ---- 6. polyphony: stacked held keys -----------------------------------
     std::cout << "[6] polyphony" << std::endl;
     {
@@ -569,6 +615,15 @@ int main()
         check (! p->isMidiLearning(), "learn disarms once a CC arrives");
         check (p->getMappedCcFor ("mix") == 74, "the CC is mapped to the parameter");
         check (bufferIsSane (buf), "audio is sane through a learn");
+
+        // a learned CC is applied off the audio thread, coalesced to its latest value
+        juce::MidiBuffer cc;
+        cc.addEvent (juce::MidiMessage::controllerEvent (1, 74, 127), 0);
+        cc.addEvent (juce::MidiMessage::controllerEvent (1, 74, 0), 10);
+        p->processBlock (buf, cc);
+        p->flushPendingMidiCC();
+        auto* mixParam = p->apvts.getParameter ("mix");
+        check (mixParam != nullptr && mixParam->getValue() < 0.01f, "learned CC drives its parameter (latest value wins)");
 
         p->clearMidiMapping ("mix");
         check (p->getMappedCcFor ("mix") < 0, "mapping clears");

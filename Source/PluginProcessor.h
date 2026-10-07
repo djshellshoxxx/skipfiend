@@ -12,9 +12,15 @@
 //  SKIPFIEND  -  processor
 // ============================================================================
 
-class SkipfiendAudioProcessor : public juce::AudioProcessor
+class SkipfiendAudioProcessor : public juce::AudioProcessor,
+                                private juce::Timer
 {
 public:
+    // Applies MIDI-learned CC values to their parameters. Runs on the message
+    // thread (timer); the audio thread only posts values lock-free.
+    void flushPendingMidiCC();
+    int  getRecordedEventCount() const noexcept { return recordedCount.load (std::memory_order_acquire); }
+
     SkipfiendAudioProcessor();
     ~SkipfiendAudioProcessor() override;
 
@@ -272,6 +278,8 @@ private:
     std::atomic<bool> midiLearnActive { false };
     std::atomic<int> midiLearnTargetIndex { -1 };
     std::array<std::atomic<int>, 128> ccToParamIndex {};
+    std::array<std::atomic<float>, 128> pendingCcValue {};   // < 0 = nothing pending
+    void timerCallback() override { flushPendingMidiCC(); }
     int parameterIndexForId (const juce::String& paramId) const;
     juce::String parameterIdForIndex (int index) const;
 
@@ -316,6 +324,9 @@ private:
     long long playheadPos = 0;
     bool      playheadInit = false;
     bool      timeSuspended = false;
+    std::atomic<bool> playheadResyncRequested { false };   // set by the message thread
+    double    prevBlockPpqEnd = -1.0;                     // detects host loop/seek jumps
+    long long blockBaseNow = 0;                           // roll.now() at the block's first sample
     long long pendingResumePos = 0;
     long long lastLoopResumePos = 0;
 
