@@ -33,7 +33,7 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSKIPFIEND_BUILD_TESTS=ON -DSKIPFIEND_COPY_PLUGIN_AFTER_BUILD=OFF
 
       - name: Build shipping targets
-        run: cmake --build build --target SKIPFIEND_VST3 SKIPFIEND_Standalone --config Release --parallel 2
+        run: cmake --build build --target SKIPFIEND_VST3 SKIPFIEND_CLAP SKIPFIEND_Standalone --config Release --parallel 2
 
       - name: Build headless tests
         run: cmake --build build --target SKIPFIEND_Tests --config Release --parallel 2

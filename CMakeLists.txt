@@ -4,6 +4,9 @@ project(SKIPFIEND VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Static MSVC runtime: the Windows .exe/.vst3/.clap run without the VC++ redistributable.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # ---------------------------------------------------------------------------
 # JUCE  -  fetched automatically. Set SKIPFIEND_JUCE_PATH to use a local copy.
 # ---------------------------------------------------------------------------
@@ -50,6 +53,25 @@ juce_add_plugin(SKIPFIEND
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE)
 
 juce_generate_juce_header(SKIPFIEND)
+
+# ---------------------------------------------------------------------------
+# CLAP  -  built from the same JUCE plug-in via clap-juce-extensions.
+# Disable with -DSKIPFIEND_BUILD_CLAP=OFF (e.g. for offline builds).
+# ---------------------------------------------------------------------------
+option(SKIPFIEND_BUILD_CLAP "Build the CLAP plug-in format" ON)
+
+if(SKIPFIEND_BUILD_CLAP)
+    include(FetchContent)
+    FetchContent_Declare(clap_juce_extensions
+        GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+        GIT_TAG        7adee3a1bd4684d4caa5601100e364abccff4b4d
+        GIT_SUBMODULES_RECURSE TRUE)
+    FetchContent_MakeAvailable(clap_juce_extensions)
+
+    clap_juce_extensions_plugin(TARGET SKIPFIEND
+        CLAP_ID       "com.circuitdriftlabs.skipfiend"
+        CLAP_FEATURES audio-effect glitch distortion stereo mono)
+endif()
 
 target_sources(SKIPFIEND PRIVATE
     Source/PluginProcessor.cpp

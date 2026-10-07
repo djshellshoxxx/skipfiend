@@ -22,7 +22,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-Outputs (VST3 + Standalone) land in `build/SKIPFIEND_artefacts/Release/`. `COPY_PLUGIN_AFTER_BUILD` also installs the VST3 to the system plugin folder.
+Outputs (VST3 + CLAP + Standalone) land in `build/SKIPFIEND_artefacts/Release/`. `COPY_PLUGIN_AFTER_BUILD` also installs the VST3 to the system plugin folder.
 
 On memory-constrained machines, build single-threaded — LTO is already disabled in `CMakeLists.txt` for the same reason:
 ```
@@ -128,11 +128,15 @@ For a more animated edit, select **Stutter Edit** or **Evolve** and raise **Moti
 
 ## Status
 
-The current VST3 and Standalone implementation is feature-complete against the SKIPFIEND product specification. MP3 CORRUPT and TAPE DROPOUT are intentionally stylised failure models rather than forensic codec/tape emulators; TAPE DROPOUT now includes real reverse-recovery playback rather than a display-only hint.
+The current VST3, CLAP and Standalone implementation is feature-complete against the SKIPFIEND product specification. MP3 CORRUPT and TAPE DROPOUT are intentionally stylised failure models rather than forensic codec/tape emulators; TAPE DROPOUT now includes real reverse-recovery playback rather than a display-only hint.
 
 Automated QA covers DSP extremes, state/preset round-trips, malformed state, MIDI learn, sample loading, export, lifecycle abuse, UI rendering at multiple scales, live UI states, and repeated editor open/close cycles. Linux CI builds and runs the headless suite. A real-host/pluginval validation pass remains an external release-validation step because it requires a host/plugin validator environment rather than repository code.
 
-The supported shipping targets for this specification are VST3 and Standalone. CLAP is a future format expansion and is not part of the current product contract.
+The supported shipping targets are VST3, CLAP and Standalone. CLAP is built from the same JUCE processor via [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions) (`-DSKIPFIEND_BUILD_CLAP=OFF` to skip it).
+
+## Downloads
+
+Prebuilt Windows (standalone `.exe`, VST3, CLAP) and Linux (standalone, VST3, CLAP) binaries are attached to each [GitHub Release](https://github.com/djshellshoxxx/skipfiend/releases). The `Release` workflow builds, tests and publishes them whenever the version in `CMakeLists.txt` changes on `main`, or on a `v*` tag.
 
 ## Plain-language overview
 

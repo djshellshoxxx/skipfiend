@@ -1,0 +1,130 @@
+name: SKIPFIEND Release
+
+# Builds the shipping binaries (Windows + Linux: Standalone, VST3, CLAP) and
+# publishes them as a GitHub Release tagged v<project version>.
+# Runs on version tags, on pushes to main (only if that version has no release
+# yet), or manually from the Actions tab.
+on:
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=$(sed -n 's/^project(SKIPFIEND VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          tag="v$ver"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_type }}" = "branch" ] \
+             && gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; bump the version in CMakeLists.txt to publish a new one."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            name: Windows-x64
+          - os: ubuntu-22.04
+            name: Linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install JUCE Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype6-dev libfontconfig1-dev \
+            libgl1-mesa-dev libx11-dev libxext-dev libxinerama-dev libxcursor-dev \
+            libxrandr-dev libgtk-3-dev
+
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSKIPFIEND_BUILD_TESTS=ON -DSKIPFIEND_COPY_PLUGIN_AFTER_BUILD=OFF
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel 4 --target SKIPFIEND_Standalone SKIPFIEND_VST3 SKIPFIEND_CLAP SKIPFIEND_Tests
+
+      - name: Test
+        shell: bash
+        run: ctest --test-dir build --output-on-failure -C Release
+
+      - name: Package
+        shell: bash
+        run: |
+          art=build/SKIPFIEND_artefacts/Release
+          pkg="SKIPFIEND-${{ needs.version.outputs.tag }}-${{ matrix.name }}"
+          mkdir -p "dist/$pkg"
+          cp -R "$art/VST3/SKIPFIEND.vst3" "dist/$pkg/"
+          cp -R "$art/CLAP/SKIPFIEND.clap" "dist/$pkg/"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp "$art/Standalone/SKIPFIEND.exe" "dist/$pkg/"
+            cp "$art/Standalone/SKIPFIEND.exe" "dist/SKIPFIEND-${{ needs.version.outputs.tag }}-Windows-x64.exe"
+          else
+            cp "$art/Standalone/SKIPFIEND" "dist/$pkg/"
+          fi
+          cp README.md MANUAL.md LICENCE.txt "dist/$pkg/"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip "$pkg.zip" "$pkg" >/dev/null
+          else
+            tar -czf "$pkg.tar.gz" "$pkg"
+          fi
+          rm -rf "$pkg"
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
+
+  release:
+    needs: [ version, build ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: SKIPFIEND ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: dist/*
+          body: |
+            SKIPFIEND ${{ needs.version.outputs.tag }} — playback-failure stutter/skip effect by Circuit Drift Labs.
+
+            **Downloads**
+            - `SKIPFIEND-*-Windows-x64.exe` — standalone Windows app (no install needed)
+            - `SKIPFIEND-*-Windows-x64.zip` — Standalone `.exe`, `SKIPFIEND.vst3`, `SKIPFIEND.clap`
+            - `SKIPFIEND-*-Linux-x64.tar.gz` — Standalone binary, `SKIPFIEND.vst3`, `SKIPFIEND.clap`
+
+            **Install**
+            - Windows: copy `SKIPFIEND.vst3` to `C:\Program Files\Common Files\VST3\` and `SKIPFIEND.clap` to `C:\Program Files\Common Files\CLAP\`
+            - Linux: copy `SKIPFIEND.vst3` to `~/.vst3/` and `SKIPFIEND.clap` to `~/.clap/`; run `./SKIPFIEND` for the standalone
+
+            Builds are unsigned; Windows SmartScreen may ask you to confirm the first launch.

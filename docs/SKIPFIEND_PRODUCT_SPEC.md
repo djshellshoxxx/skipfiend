@@ -20,7 +20,7 @@ Applicable profiles:
 | Offline renderer/exporter | Implemented, limited | Exports recent processed audio to WAV and retrigger events to MIDI |
 | Instrument | Not applicable | Does not generate pitched instrument voices from MIDI notes |
 
-Shipping formats for this specification: VST3 and Standalone. CLAP is future scope and is not required for 1.0 completion.
+Shipping formats for this specification: VST3, CLAP and Standalone. CLAP is produced from the same processor through clap-juce-extensions.
 
 ## 2. Supported environment and buses
 
@@ -230,14 +230,14 @@ Source repository: <https://github.com/djshellshoxxx/skipfiend>
 | Automated DSP/state QA | Implemented | headless test suite + CI |
 | Automated UI rendering QA | Implemented | multiple scales/states/overlays |
 | Real-host/pluginval validation | External release gate | Must be recorded when performed on a release machine/host |
-| CLAP | Planned, not in 1.0 contract | Future format expansion |
+| CLAP | Implemented | clap-juce-extensions wrapper; built in CI and release |
 
 ## 16. Completion definition
 
-The repository is implementation-complete for the current VST3/Standalone 1.0 contract when:
+The repository is implementation-complete for the current VST3/CLAP/Standalone 1.0 contract when:
 1. every requirement above maps to implemented code or an explicit external release gate;
 2. the full headless suite passes on the final commit;
-3. the VST3/Standalone targets compile on the supported build configuration;
+3. the VST3/CLAP/Standalone targets compile on the supported build configuration;
 4. README and MANUAL contain no known-behavior contradictions;
 5. no TODO/stub text describes required 1.0 behavior;
 6. CI is green on the final PR head.
