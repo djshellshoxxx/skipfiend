@@ -69,8 +69,10 @@ Behaviour (hard cut / tail out / glitch click / seek noise / silence-resume).
   noise played between skips.
 - **SIDECHAIN TRIGGER** — fires skips from transients on the Sidechain bus
   instead of the grid (enable the Sidechain input in your host).
-- **MIDI MODE** — incoming MIDI notes trigger engines directly: note number
-  mod 8 picks the engine, velocity sets the repeat count.
+- **MIDI PERFORMANCE** — white keys select deterministic failure engines,
+  black keys select random failures, and octave selects the cycle subdivision
+  (1x / 4x / 8x / 16x / 32x). Velocity is retained as activity telemetry but
+  does not set repeat count.
 - **SKIP LANGUAGE** — the 16-step sequencer at the bottom drives triggering
   instead of the density/chaos dice. Click a cell to cycle its engine
   (including off), mouse-wheel to set its repeat count.
@@ -166,9 +168,9 @@ strip** across the top holds everything you need mid-set:
 - **RANDOM TRIGGER** — the same, but it re-randomises every engine first,
   so each stab is a different failure. Turn on **LATCH** to make both
   trigger buttons toggle per click instead of hold-to-perform.
-- **RESET** — puts every parameter back to its default. Also happens
-  automatically whenever you load a new sample/track, so each track starts
-  from a clean slate.
+- **RESET** — puts every parameter back to its default. Loading a new sample
+  does not change the current effect settings, so the same design can be
+  auditioned across multiple sources.
 - Every control is right-click MIDI-mappable, so a controller can drive the
   dry/wet, density, chaos, or anything else hands-free.
 
@@ -176,15 +178,16 @@ strip** across the top holds everything you need mid-set:
 
 MIDI triggering is always live — there's no mode to switch on:
 
-- **Holding a key** selects a factory preset (note number cycles through
-  them) and plays it at **full wet** for as long as the key is held,
-  re-triggering on every grid step.
-- **Releasing the key** restores whatever your dry/wet was set to before.
-- Different keys give genuinely different effects, so a pad controller
-  becomes a bank of performance FX.
+- **Holding a white key** selects a deterministic failure engine and plays at
+  **full wet** for as long as the key is held.
+- **Holding a black key** selects a random failure and can re-roll its character
+  on subsequent cycles.
+- **Octave** selects the cycle subdivision: 1x / 4x / 8x / 16x / 32x.
+- **Releasing the final held key** restores the dry/wet value that was active
+  before MIDI performance began.
+- Multiple held keys can layer/chains effects through the available voice pool.
 
-Note: this is last-note-priority (monophonic) — pressing a second key
-switches to that key's preset rather than layering.
+Held MIDI notes are polyphonic: each held key can own an independent effect voice/cycle, subject to the 16-voice pool and voice-stealing rules.
 
 ## Overlay FX — Echo / Delay / Dub / Reverse
 
@@ -283,8 +286,7 @@ locked.
 
 The engines are functional models rather than fully spectral-accurate
 emulations — MP3 CORRUPT and TAPE DROPOUT in particular are lightweight
-approximations. TAPE DROPOUT's "reverse" recovery is a visual flicker in
-the display rather than true reversed audio playback.
+approximations. TAPE DROPOUT is a stylised tape-failure model; its occasional reverse recovery now reverses the tail of the captured slice in the audio path.
 
 ## Keyboard
 

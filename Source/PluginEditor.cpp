@@ -2,7 +2,7 @@
 
 namespace col
 {
-    // === VISUAL IDENTITY SPEC (theme.md) -- FiendAudio house palette ===
+    // === VISUAL IDENTITY SPEC (theme.md) -- Circuit Drift Labs house palette ===
     // Neutrals, layout and control shapes are shared by every plugin; only one
     // accent may be re-tinted per plugin for its own identity.
     static const juce::Colour bg      { 0xff0e1116 };   // background base
@@ -253,18 +253,17 @@ The strip across the top is built to be played mid-set:
   RANDOM TRIGGER   The same, but re-randomises every engine first, so each
                    stab is a different failure. LATCH makes both trigger
                    buttons toggle per click instead of hold-to-perform.
-  RESET            Every parameter back to default. This also happens
-                   automatically when you load a new sample/track.
+  RESET            Every parameter back to default. Loading a new sample does
+                   not change the current effect settings.
 
 MIDI HOLD-TO-PERFORM
 ---------------------
-MIDI triggering is always live -- there is no mode to switch on. Holding a
-key selects a factory preset (note number cycles through them) and plays it
-at FULL WET for as long as the key is held, re-triggering every grid step.
-Releasing restores your dry/wet.
-Different keys give different effects, so a pad controller becomes a bank
-of performance FX. Last-note priority: a second key switches presets
-rather than layering.
+MIDI triggering is always live -- there is no mode to switch on. White keys
+select deterministic failure engines; black keys select random failures.
+Octave chooses the cycle subdivision (1x / 4x / 8x / 16x / 32x). Holds play
+at FULL WET without changing the base MIX parameter. Multiple held keys are
+polyphonic and can layer/chains effects through the voice pool. Releasing
+the final key returns to the user's normal MIX setting.
 
 LOOP / GRID LENGTH
 -------------------
@@ -287,9 +286,8 @@ MASTER SECTION
                    noise played between skips.
   SIDECHAIN TRIG   fires skips from transients on the Sidechain bus instead
                    of the grid (enable the Sidechain input in your host).
-  MIDI MODE        incoming MIDI notes trigger engines directly -- note
-                   number mod 8 picks the engine, velocity sets the repeat
-                   count.
+  MIDI PERFORMANCE white keys select deterministic engines, black keys
+                   randomise the failure, and octave chooses cycle speed.
   SKIP LANGUAGE    the 16-step sequencer at the bottom drives triggering
                    instead of the density/chaos dice. Click a cell to cycle
                    its engine (including off), mouse-wheel to set its
@@ -465,7 +463,7 @@ VERSION, LICENCE AND LINKS
             installed plugin.
   Homepage  )MANUAL" SKIPFIEND_HOMEPAGE R"MANUAL(
   Source    )MANUAL" SKIPFIEND_GITHUB R"MANUAL(
-  Support   )MANUAL" SKIPFIEND_SUPPORT_EMAIL R"MANUAL(
+  Support   )MANUAL" SKIPFIEND_SUPPORT_CONTACT R"MANUAL(
 )MANUAL";
 
 //==============================================================================
@@ -1409,7 +1407,7 @@ SkipfiendAudioProcessorEditor::DebugOverlay::DebugOverlay()
         "keeps writing; if the plugin goes down, the crash lands in it. Leave it on, "
         "reproduce the crash, then send the file.\n"
         "Both are written to Documents/SKIPFIEND/Diagnostics. If SKIPFIEND keeps crashing, "
-        "send BOTH to " SKIPFIEND_SUPPORT_EMAIL " with a description of what you did.",
+        "send BOTH to " SKIPFIEND_SUPPORT_CONTACT " with a description of what you did.",
         juce::dontSendNotification);
     addAndMakeVisible (note);
 
@@ -1687,8 +1685,8 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
     midiExportBtn.setTooltip ("Export the retrigger pattern just played as a .mid file.");
     canvas.addAndMakeVisible (captureBtn);
     canvas.addAndMakeVisible (midiExportBtn);
-    captureBtn.onClick    = [this] { proc.requestCapture.store (true); };
-    midiExportBtn.onClick = [this] { proc.requestMidiExport.store (true); };
+    captureBtn.onClick    = [this] { proc.doCapture(); };
+    midiExportBtn.onClick = [this] { proc.doMidiExport(); };
 
     // ---- header: bypass / help / dice / presets / meter ----
     bypassBtn.setLookAndFeel (&lnf);
@@ -1978,7 +1976,7 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
                 "Crash logging on",
                 "Writing to:\n" + proc.getCrashLogFile().getFullPathName()
                     + "\n\nLeave this on, reproduce the crash, then send that file to "
-                      SKIPFIEND_SUPPORT_EMAIL " along with the troubleshooting file.",
+                      SKIPFIEND_SUPPORT_CONTACT " along with the troubleshooting file.",
                 "OK");
     };
 
@@ -2129,6 +2127,13 @@ SkipfiendAudioProcessorEditor::SkipfiendAudioProcessorEditor (SkipfiendAudioProc
 
 SkipfiendAudioProcessorEditor::~SkipfiendAudioProcessorEditor()
 {
+    // The window can close while a momentary button is physically held; its
+    // mouseUp will never arrive, so let go here or the gate stays open unseen.
+    // Latched buttons are a deliberate hands-free state and are left alone.
+    for (auto* b : { &triggerBtn, &randomTriggerBtn, &echoBtn, &delayBtn, &dubBtn, &reverseBtn })
+        if (b->isDown() && ! b->latchedOn && b->onRelease)
+            b->onRelease();
+
     setLookAndFeel (nullptr);
     for (auto* s : knobs)  s->setLookAndFeel (nullptr);
     for (auto* c : combos) c->setLookAndFeel (nullptr);
@@ -2236,8 +2241,9 @@ void SkipfiendAudioProcessorEditor::loadSampleViaChooser()
     auto chooser = std::make_shared<juce::FileChooser> ("Load a test sample...", juce::File(),
         "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.caf");
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, chooser] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
             if (file.existsAsFile()) tryLoadSample (file);
         });
@@ -2251,8 +2257,9 @@ void SkipfiendAudioProcessorEditor::savePresetViaChooser()
     auto chooser = std::make_shared<juce::FileChooser> ("Save preset...",
         dir.getChildFile ("Preset.skipfiend"), "*.skipfiend");
     chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
-        [this, chooser] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
             if (file != juce::File())
             {
@@ -2268,8 +2275,9 @@ void SkipfiendAudioProcessorEditor::loadPresetViaChooser()
                    .getChildFile ("SKIPFIEND").getChildFile ("Presets");
     auto chooser = std::make_shared<juce::FileChooser> ("Load preset...", dir, "*.skipfiend");
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, chooser] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
             if (file.existsAsFile())
             {
@@ -2370,8 +2378,9 @@ void SkipfiendAudioProcessorEditor::exportAudioViaChooser (double seconds)
 
     chooser->launchAsync (juce::FileBrowserComponent::saveMode
                             | juce::FileBrowserComponent::warnAboutOverwriting,
-        [this, chooser, seconds] (const juce::FileChooser& fc)
+        [this, safe = juce::Component::SafePointer<SkipfiendAudioProcessorEditor> (this), chooser, seconds] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;   // editor closed while the dialog was open
             auto file = fc.getResult();
 
             if (file == juce::File())
@@ -2455,11 +2464,11 @@ void SkipfiendAudioProcessorEditor::showAbout()
         "SKIPFIEND " SKIPFIEND_VERSION,
         "SKIPFIEND  -  playback failure unit\n"
         "Version " SKIPFIEND_VERSION "\n"
-        "(c) FiendAudio\n\n"
+        "(c) Circuit Drift Labs\n\n"
         "Licence:   one seat per user, see LICENCE.txt in the install folder.\n"
         "Homepage:  " SKIPFIEND_HOMEPAGE "\n"
         "Source:    " SKIPFIEND_GITHUB "\n"
-        "Support:   " SKIPFIEND_SUPPORT_EMAIL "\n\n"
+        "Support:   " SKIPFIEND_SUPPORT_CONTACT "\n\n"
         "Press HELP for the full manual, troubleshooting and install notes.",
         "OK");
 }

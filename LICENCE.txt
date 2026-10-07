@@ -1,0 +1,27 @@
+SKIPFIEND END-USER LICENCE
+
+Copyright © 2026 Sheldon Davidson. All rights reserved.
+
+This file covers compiled SKIPFIEND builds distributed by the copyright holder. The repository source and project materials remain governed by the separate LICENSE file.
+
+1. Licence grant
+A licensed individual may install and use SKIPFIEND for personal or commercial audio production on computers and systems they control. The licence is for one user and is not transferable except with written permission from the copyright holder.
+
+2. User-created output
+Audio, MIDI, presets, projects, recordings, performances, and other creative output made by a licensed user with SKIPFIEND remain the user's work. This licence does not claim ownership of that output.
+
+3. Restrictions
+Except where applicable law expressly permits otherwise, the user may not redistribute, resell, sublicense, publish, rent, lease, or provide copies of SKIPFIEND itself, nor remove or misrepresent copyright or licensing notices.
+
+4. Third-party components
+JUCE and other third-party components remain governed by their own licences and notices. This licence grants no additional rights to third-party material.
+
+5. Source code
+Access to the source repository does not grant permission to copy, modify, redistribute, sublicense, publish, sell, or create derivative works from covered project source or assets. See LICENSE for the source licence.
+
+6. Warranty
+SKIPFIEND is provided “AS IS”, without warranty of any kind. To the maximum extent permitted by law, the copyright holder is not liable for claims, damages, or other liability arising from use of the software.
+
+7. Support and licensing contact
+Project/support issues: https://github.com/djshellshoxxx/skipfiend/issues
+Source licence: LICENSE

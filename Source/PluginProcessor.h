@@ -12,9 +12,15 @@
 //  SKIPFIEND  -  processor
 // ============================================================================
 
-class SkipfiendAudioProcessor : public juce::AudioProcessor
+class SkipfiendAudioProcessor : public juce::AudioProcessor,
+                                private juce::Timer
 {
 public:
+    // Applies MIDI-learned CC values to their parameters. Runs on the message
+    // thread (timer); the audio thread only posts values lock-free.
+    void flushPendingMidiCC();
+    int  getRecordedEventCount() const noexcept { return recordedCount.load (std::memory_order_acquire); }
+
     SkipfiendAudioProcessor();
     ~SkipfiendAudioProcessor() override;
 
@@ -88,9 +94,8 @@ public:
 
     const skf::RollingBuffer& rolling() const noexcept { return roll; }
 
-    // one-shot actions from the editor
-    std::atomic<bool> requestCapture   { false };
-    std::atomic<bool> requestMidiExport { false };
+    // one-shot file actions. These are called from UI/message-thread callbacks,
+    // never from processBlock: state serialization and filesystem I/O are not RT-safe.
     void doCapture();
     void doMidiExport();
 
@@ -140,8 +145,8 @@ public:
     // The effect ONLY runs while the gate is open, and the gate is only opened
     // by a held MIDI note, the TRIGGER button, or the RANDOM TRIGGER button.
     void resetAllToDefaults();
-    void engageRandomTrigger();     // randomise everything + slam to full wet
-    void releaseRandomTrigger();    // restore the mix that was set before engaging
+    void engageRandomTrigger();     // randomise everything + engage full-wet performance override
+    void releaseRandomTrigger();    // release performance override without changing MIX
     void setManualTrigger (bool held);   // the TRIGGER button
     bool isRandomTriggerEngaged() const noexcept { return randomTriggerEngaged.load(); }
     bool isManualTriggerHeld() const noexcept    { return manualTriggerHeld.load(); }
@@ -243,9 +248,13 @@ private:
     float scEnv = 0.0f, scPrev = 0.0f;
     int   scHold = 0;
 
-    // recorded trigger events for Skip-to-MIDI
-    struct TrigEvt { double ppq; int engine; int repeats; };
-    std::vector<TrigEvt> recorded;
+    // recorded trigger events for Skip-to-MIDI. Fixed-capacity storage avoids
+    // allocator activity on the audio thread and makes export snapshots safe:
+    // an event is fully written before recordedCount is published.
+    struct TrigEvt { double ppq = 0.0; int engine = 0; int repeats = 0; };
+    static constexpr int kMaxRecordedEvents = 8000;
+    std::array<TrigEvt, kMaxRecordedEvents> recorded {};
+    std::atomic<int> recordedCount { 0 };
     double lastPpq = 0.0;
 
     // ---- test-sample deck --------------------------------------------------
@@ -265,10 +274,14 @@ private:
     std::atomic<double> bufferedSeconds { 64.0 };
 
     // ---- MIDI learn ---------------------------------------------------
+    // Fixed-size, lock-free mapping used directly by processBlock.
     std::atomic<bool> midiLearnActive { false };
-    mutable juce::SpinLock midiLearnLock;
-    juce::String learnTargetId;
-    std::map<int, juce::String> ccToParam;
+    std::atomic<int> midiLearnTargetIndex { -1 };
+    std::array<std::atomic<int>, 128> ccToParamIndex {};
+    std::array<std::atomic<float>, 128> pendingCcValue {};   // < 0 = nothing pending
+    void timerCallback() override { flushPendingMidiCC(); }
+    int parameterIndexForId (const juce::String& paramId) const;
+    juce::String parameterIdForIndex (int index) const;
 
     // ---- live performance state ------------------------------------------
     // Polyphonic held keys. Each key runs its own effect at its own rate, so
@@ -293,7 +306,6 @@ private:
     int  triggerVoiceIndex = -1;      // the button's own cycling voice
     bool triggerStarted = false;
     bool gateWasOpen = false;                     // audio thread only, edge detect
-    float savedMixBeforeManualTrigger = 1.0f;     // message thread only
 
     // ---- overlay effects --------------------------------------------------
     std::array<std::atomic<bool>, NUM_OVERLAYS> overlayHeld { };
@@ -312,6 +324,9 @@ private:
     long long playheadPos = 0;
     bool      playheadInit = false;
     bool      timeSuspended = false;
+    std::atomic<bool> playheadResyncRequested { false };   // set by the message thread
+    double    prevBlockPpqEnd = -1.0;                     // detects host loop/seek jumps
+    long long blockBaseNow = 0;                           // roll.now() at the block's first sample
     long long pendingResumePos = 0;
     long long lastLoopResumePos = 0;
 
@@ -320,7 +335,6 @@ private:
     std::vector<double> tapTimes;
     std::atomic<double> currentBpm { 120.0 };     // resolved tempo (host or manual), for the UI
     std::atomic<bool> followingHostBpm { false }; // whether the host is actually supplying it
-    float savedMixBeforeMidiHold = 1.0f;          // audio thread only
 
     // ---- RUIN, the hidden effect (audio thread only) -----------------------
     float ruinPhase = 0.0f, ruinStep = 1.0f;
@@ -336,7 +350,6 @@ private:
     juce::MemoryBlock abSlot[2];
     int  currentSlot = 0;
     bool hasRandomised = false;
-    float savedMixBeforeRandomTrigger = 1.0f;     // message thread only
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SkipfiendAudioProcessor)
 };

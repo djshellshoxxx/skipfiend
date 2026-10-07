@@ -4,6 +4,9 @@ project(SKIPFIEND VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Static MSVC runtime: the Windows .exe/.vst3/.clap run without the VC++ redistributable.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # ---------------------------------------------------------------------------
 # JUCE  -  fetched automatically. Set SKIPFIEND_JUCE_PATH to use a local copy.
 # ---------------------------------------------------------------------------
@@ -26,14 +29,14 @@ endif()
 # manual and the troubleshooting export. Replace these three lines before
 # release and every one of those follows.
 # ---------------------------------------------------------------------------
-set(SKIPFIEND_HOMEPAGE      "https://fiendaudio.example/skipfiend" CACHE STRING "Product homepage")
-set(SKIPFIEND_SUPPORT_EMAIL "support@fiendaudio.example"           CACHE STRING "Support email")
-set(SKIPFIEND_GITHUB        "https://github.com/fiendaudio/skipfiend" CACHE STRING "Source repository")
+set(SKIPFIEND_HOMEPAGE        "https://djshellshoxxx.github.io/circuitdriftlabs/" CACHE STRING "Product homepage")
+set(SKIPFIEND_SUPPORT_CONTACT "https://github.com/djshellshoxxx/skipfiend/issues" CACHE STRING "Support contact")
+set(SKIPFIEND_GITHUB          "https://github.com/djshellshoxxx/skipfiend" CACHE STRING "Source repository")
+option(SKIPFIEND_COPY_PLUGIN_AFTER_BUILD "Install built plug-in after a local build" ON)
 
 juce_add_plugin(SKIPFIEND
-    COMPANY_NAME              "FiendAudio"
+    COMPANY_NAME              "Circuit Drift Labs"
     COMPANY_WEBSITE           "${SKIPFIEND_HOMEPAGE}"
-    COMPANY_EMAIL             "${SKIPFIEND_SUPPORT_EMAIL}"
     PLUGIN_MANUFACTURER_CODE  Fnda
     PLUGIN_CODE               Skpf
     FORMATS                   VST3 Standalone
@@ -43,13 +46,32 @@ juce_add_plugin(SKIPFIEND
     NEEDS_MIDI_INPUT          TRUE
     NEEDS_MIDI_OUTPUT         FALSE
     IS_MIDI_EFFECT           FALSE
-    COPY_PLUGIN_AFTER_BUILD   TRUE
+    COPY_PLUGIN_AFTER_BUILD   ${SKIPFIEND_COPY_PLUGIN_AFTER_BUILD}
     VST3_CATEGORIES           Fx Distortion
     ICON_BIG                  "${CMAKE_CURRENT_SOURCE_DIR}/Source/icon.png"
     ICON_SMALL                "${CMAKE_CURRENT_SOURCE_DIR}/Source/icon_small.png"
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE)
 
 juce_generate_juce_header(SKIPFIEND)
+
+# ---------------------------------------------------------------------------
+# CLAP  -  built from the same JUCE plug-in via clap-juce-extensions.
+# Disable with -DSKIPFIEND_BUILD_CLAP=OFF (e.g. for offline builds).
+# ---------------------------------------------------------------------------
+option(SKIPFIEND_BUILD_CLAP "Build the CLAP plug-in format" ON)
+
+if(SKIPFIEND_BUILD_CLAP)
+    include(FetchContent)
+    FetchContent_Declare(clap_juce_extensions
+        GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+        GIT_TAG        7adee3a1bd4684d4caa5601100e364abccff4b4d
+        GIT_SUBMODULES_RECURSE TRUE)
+    FetchContent_MakeAvailable(clap_juce_extensions)
+
+    clap_juce_extensions_plugin(TARGET SKIPFIEND
+        CLAP_ID       "com.circuitdriftlabs.skipfiend"
+        CLAP_FEATURES audio-effect glitch distortion stereo mono)
+endif()
 
 target_sources(SKIPFIEND PRIVATE
     Source/PluginProcessor.cpp
@@ -58,7 +80,7 @@ target_sources(SKIPFIEND PRIVATE
 target_compile_definitions(SKIPFIEND PUBLIC
     SKIPFIEND_VERSION="${PROJECT_VERSION}"
     SKIPFIEND_HOMEPAGE="${SKIPFIEND_HOMEPAGE}"
-    SKIPFIEND_SUPPORT_EMAIL="${SKIPFIEND_SUPPORT_EMAIL}"
+    SKIPFIEND_SUPPORT_CONTACT="${SKIPFIEND_SUPPORT_CONTACT}"
     SKIPFIEND_GITHUB="${SKIPFIEND_GITHUB}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
@@ -94,7 +116,7 @@ if(SKIPFIEND_BUILD_TESTS)
     target_compile_definitions(SKIPFIEND_Tests PRIVATE
         SKIPFIEND_VERSION="${PROJECT_VERSION}"
         SKIPFIEND_HOMEPAGE="${SKIPFIEND_HOMEPAGE}"
-        SKIPFIEND_SUPPORT_EMAIL="${SKIPFIEND_SUPPORT_EMAIL}"
+        SKIPFIEND_SUPPORT_CONTACT="${SKIPFIEND_SUPPORT_CONTACT}"
         SKIPFIEND_GITHUB="${SKIPFIEND_GITHUB}"
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0

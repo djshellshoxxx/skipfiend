@@ -4,7 +4,7 @@
 
 Where most glitch plugins spread across granular, spectral and corruption tools, SKIPFIEND commits fully to the stutter/repeat/skip family. It models a rolling buffer of at least the last 64 seconds of audio as a physical playback medium being abused — a bumped CD, a scratched disc, a dying drive, a corrupted MP3, a skipping DAT, a stuck cassette, a broken stream — and drives every skip from the physics of that failure.
 
-This repo is the **SKIPFIEND CD** milestone plus a working pass at the full engine set (build steps 1–8 of the design doc): rolling buffer, all nine parallel skip engines, the full Repeat Engine underneath them, the two master controls, Rhythmic Gravity, Recovery Artifacts, a Skip Language sequencer, MIDI trigger mode, sidechain trigger, capture, and Skip-to-MIDI export.
+This repo contains the complete current SKIPFIEND VST3/Standalone product specification and implementation: rolling buffer, all nine parallel skip engines, the full Repeat Engine underneath them, the two master controls, Rhythmic Gravity, Recovery Artifacts, a Skip Language sequencer, MIDI trigger mode, sidechain trigger, capture, and Skip-to-MIDI export.
 
 ## Build
 
@@ -22,7 +22,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-Outputs (VST3 + Standalone) land in `build/SKIPFIEND_artefacts/Release/`. `COPY_PLUGIN_AFTER_BUILD` also installs the VST3 to the system plugin folder.
+Outputs (VST3 + CLAP + Standalone) land in `build/SKIPFIEND_artefacts/Release/`. `COPY_PLUGIN_AFTER_BUILD` also installs the VST3 to the system plugin folder.
 
 On memory-constrained machines, build single-threaded — LTO is already disabled in `CMakeLists.txt` for the same reason:
 ```
@@ -48,9 +48,9 @@ It also builds the editor with no window and renders it to PNGs in your temp dir
 ```
 input ─┬─────────────────────────────► dry ──────────────┐
        │                                                  │  crossfade
-       └─► RollingBuffer (last ~22 s, sample-accurate) ─┐  │  by MIX × wet-activity
+       └─► RollingBuffer (at least 64 s, sample-accurate) ─┐  │  by MIX × wet-activity
                                                         │  │
-  trigger sources ──► Repeat voices (×8 pool) ──────────┴──┤
+  trigger sources ──► Repeat voices (16-voice pool) ──────────┴──┤
    • grid + Skip Density + Chaos                           │
    • Skip Language 16-step sequencer                       ├─► out
    • sidechain transient                                   │
@@ -103,7 +103,7 @@ For a more animated edit, select **Stutter Edit** or **Evolve** and raise **Moti
 ## Features
 
 - **Skip Language sequencer** — 16 cells at the bottom of the UI. Click a cell to cycle which engine fires there (or off); mouse-wheel to set its repeat count. When **SKIP LANGUAGE** is on it drives triggering instead of the density/chaos dice.
-- **MIDI Trigger Mode** — note number mod 8 selects an engine, velocity scales the repeat count. Route MIDI to the plugin and play the failure.
+- **MIDI performance** — white keys select deterministic failure engines, black keys invoke a random failure, and octave selects the retrigger subdivision (1x / 4x / 8x / 16x / 32x). Multiple held keys can layer/chains effects.
 - **Sidechain Trigger** — enable the Sidechain bus; a transient above `SC Threshold` fires a weighted engine on the main signal (kick, hat or vocal driving the skips).
 - **Recovery Artifacts** — dials in the seek click / laser hunt / buffer-fill hiss / tape-stop wobble that plays between skips, matched to the engine that just recovered.
 - **CAPTURE** — writes the current full state to `~/Documents/SKIPFIEND/capture_*.skipfiend` before it drifts away.
@@ -124,18 +124,19 @@ For a more animated edit, select **Stutter Edit** or **Evolve** and raise **Moti
 | `Source/PluginProcessor.*` | parameters, transport/grid/sequencer/sidechain/MIDI triggering, engine configuration, voice pool, dry/wet crossfade, state, capture, MIDI export |
 | `Source/PluginEditor.*` | the UI: `FiendLNF` look and feel implementing the house visual identity, `WaveformDisplay`, engine strip, Repeat Engine + Master panels, Skip Language cells, and the Help / Options / Debug overlays |
 | `Tests/HeadlessTests.cpp` | headless test harness (off by default, see **Tests**) |
-| `theme.md` / `include.md` | the shared visual identity spec and the checklist every FiendAudio plugin implements |
+| `theme.md` / `include.md` | the shared visual identity spec and the checklist every Circuit Drift Labs plugin implements |
 
-## Status / not yet done
+## Status
 
-The engines are functional models rather than fully spectral-accurate emulations — MP3 CORRUPT and TAPE DROPOUT in particular are lightweight approximations. Reverse-play flashes for TAPE DROPOUT are stubbed. Media presets with guest-producer fingerprints (design step 9) are not in this build.
+The current VST3, CLAP and Standalone implementation is feature-complete against the SKIPFIEND product specification. MP3 CORRUPT and TAPE DROPOUT are intentionally stylised failure models rather than forensic codec/tape emulators; TAPE DROPOUT now includes real reverse-recovery playback rather than a display-only hint.
 
-Outstanding before release:
+Automated QA covers DSP extremes, state/preset round-trips, malformed state, MIDI learn, sample loading, export, lifecycle abuse, UI rendering at multiple scales, live UI states, and repeated editor open/close cycles. Linux CI builds and runs the headless suite. A real-host/pluginval validation pass remains an external release-validation step because it requires a host/plugin validator environment rather than repository code.
 
-- **The support URLs and email are placeholders** (`fiendaudio.example`). They now live in exactly one place — `SKIPFIEND_HOMEPAGE`, `SKIPFIEND_SUPPORT_EMAIL` and `SKIPFIEND_GITHUB` at the top of `CMakeLists.txt` — and feed the VST3 module info a host displays, the About box, the in-plugin manual and the troubleshooting export. Change those three lines and everything follows.
-- **No CLAP or Linux build yet** — both are planned; the CMake only produces VST3 and Standalone today.
-- **GUI testing is manual.** The headless harness covers the processor thoroughly, but nothing automated exercises clicks, drags or painting. A `pluginval` run in a real host is still the last gate before shipping.
+The supported shipping targets are VST3, CLAP and Standalone. CLAP is built from the same JUCE processor via [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions) (`-DSKIPFIEND_BUILD_CLAP=OFF` to skip it).
 
+## Downloads
+
+Prebuilt Windows (standalone `.exe`, VST3, CLAP) and Linux (standalone, VST3, CLAP) binaries are attached to each [GitHub Release](https://github.com/djshellshoxxx/skipfiend/releases). The `Release` workflow builds, tests and publishes them whenever the version in `CMakeLists.txt` changes on `main`, or on a `v*` tag.
 
 ## Plain-language overview
 
@@ -143,4 +144,4 @@ See [ELI5: What SKIPFIEND does](ELI5.md) for a simple explanation of the effect.
 
 ## Required shared plug-in standard
 
-This project follows the [Circuit Drift Labs Shared Audio Plugin Standard](docs/standards/CDL_PLUGIN_BASELINE.md). It is required for the plug-in target; standalone-only requirements apply only when a standalone target is included. The product-specific specification supplements the shared standard and records the applicable profiles, compliance status, and any exceptions.
+This project follows the [Circuit Drift Labs Shared Audio Plugin Standard](docs/standards/CDL_PLUGIN_BASELINE.md). It is required for the plug-in target; standalone-only requirements apply only when a standalone target is included. The [product-specific specification](docs/SKIPFIEND_PRODUCT_SPEC.md) supplements the shared standard and records the applicable profiles, compliance status, and any exceptions.

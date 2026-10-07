@@ -95,6 +95,23 @@ struct RollingBuffer
         total    = 0;
     }
 
+    // Continue an existing buffer's timeline after a resize: keeps the absolute
+    // sample counter (voices hold absolute positions) and copies the history
+    // that fits. Call on a freshly prepared buffer.
+    void adoptHistoryFrom (const RollingBuffer& old)
+    {
+        total    = old.total;
+        writeIdx = (int) (total & (long long) mask);
+        const long long keep = juce::jmin<long long> (old.total, (long long) juce::jmin (old.len, len) - 8);
+        for (int c = 0; c < 2; ++c)
+        {
+            float* d = buf.getWritePointer (c);
+            const float* src = old.buf.getReadPointer (c);
+            for (long long a = total - keep; a < total; ++a)
+                d[ringPos (a)] = src[old.ringPos (a)];
+        }
+    }
+
     void push (const juce::AudioBuffer<float>& in)
     {
         const int n  = in.getNumSamples();
@@ -171,6 +188,7 @@ struct RepeatParams
     double wet           = 1.0;
     double driftMsPerRep = 0.0; // STICK drift
     int    flavor        = 0;   // 0 none 1 mp3 2 tape 3 buffer-underrun
+    bool   tapeReverse   = false; // TAPE DROPOUT: reverse the recovery tail
     bool   gate          = false;
     double bufferSilence = 0.0; // 0..1 fraction of burst muted (BUFFER UNDERRUN)
     bool   loopBurst     = false; // when the burst ends, start it again from the top
@@ -180,6 +198,21 @@ struct RepeatParams
 // ----------------------------------------------------------------------------
 //  A single retrigger voice.
 // ----------------------------------------------------------------------------
+inline void enforceRecordSkipVerbatim (RepeatParams& p) noexcept
+{
+    p.lenMode = 0;
+    p.pitchMode = 0;
+    p.basePitchSemi = 0.0;
+    p.pitchPerRep = 0.0;
+    p.volEnv = 0;
+    p.panWalk = 0;
+    p.timewarp = 0.0;
+    p.flavor = 0;
+    p.gate = false;
+    p.playMode = 0;
+    p.motion = 0.0;
+}
+
 struct RepeatVoice
 {
     void start (long long startAbs, const RepeatParams& pp, int eng, double sampleRate)
@@ -238,7 +271,9 @@ struct RepeatVoice
             case 4: semi += (rng.nextDouble() * 2.0 - 1.0) * p.pitchPerRep; break;
             default: break;
         }
-        return std::pow (2.0, semi / 12.0);
+        // Long held loops with a steep ascending/descending step would otherwise
+        // reach rates of 2^30+ and stall the audio thread in the wrap loop below.
+        return std::pow (2.0, juce::jlimit (-48.0, 48.0, semi) / 12.0);
     }
 
     double timewarpRate (int i)
@@ -375,8 +410,18 @@ struct RepeatVoice
         if (direction < 0.0)
             localPos = juce::jmax (0.0, curLen - 1.0 - pos);
 
-        const double rate = pitchRatioFor (i) * timewarpRate (i)
-                          * juce::jlimit (0.20, 4.0, choreographyRate);
+        // TAPE DROPOUT recovery: the final quarter of the last repeat can
+        // physically run backward through the captured slice. This replaces
+        // the old display-only reverse hint with actual reversed audio.
+        if (p.flavor == 2 && p.tapeReverse && i == juce::jmax (0, p.repeats - 1))
+        {
+            const double recoveryStart = curLen * 0.75;
+            if (pos >= recoveryStart)
+                localPos = juce::jmax (0.0, curLen - 1.0 - pos);
+        }
+
+        const double rate = juce::jlimit (0.03, 16.0, pitchRatioFor (i) * timewarpRate (i)
+                                              * juce::jlimit (0.20, 4.0, choreographyRate));
         const double rd   = (double) sliceStartAbs + localPos + phraseOffset;
 
         float sL = rb.readAbs (rd, 0);
@@ -651,7 +696,14 @@ struct ReverseLooper
         *outR = *dryR * (1.0f - gain) + sR * gain;
 
         pos += 1.0;
-        if (pos >= window) pos = 0.0;
+        if (pos >= window)
+        {
+            pos = 0.0;
+            // a long hold: once the captured window is about to be overwritten,
+            // reverse the most recent window instead of reading clamped audio
+            if ((double) anchor - window < (double) (rb.now() - (long long) rb.len + 16))
+                anchor = rb.now();
+        }
         return true;
     }
 

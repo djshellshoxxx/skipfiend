@@ -191,6 +191,66 @@ int main()
                "Random Pan Walk holds one position for the duration of a repeat");
     }
 
+    // ---- invariant: RECORD SKIP remains a verbatim locked groove -----------
+    std::cout << "[1d] record skip invariants" << std::endl;
+    {
+        skf::RepeatParams rp;
+        rp.lenMode = 3;
+        rp.pitchMode = 4;
+        rp.basePitchSemi = 12.0;
+        rp.pitchPerRep = 7.0;
+        rp.volEnv = 3;
+        rp.panWalk = 2;
+        rp.timewarp = 1.0;
+        rp.flavor = 2;
+        rp.gate = true;
+        rp.playMode = 5;
+        rp.motion = 1.0;
+        skf::enforceRecordSkipVerbatim (rp);
+        check (rp.lenMode == 0 && rp.pitchMode == 0
+                   && rp.basePitchSemi == 0.0 && rp.pitchPerRep == 0.0
+                   && rp.volEnv == 0 && rp.panWalk == 0 && rp.timewarp == 0.0
+                   && rp.flavor == 0 && ! rp.gate && rp.playMode == 0 && rp.motion == 0.0,
+               "RECORD SKIP constraints defeat global modulation");
+    }
+
+    // ---- TAPE DROPOUT reverse recovery is real audio, not just a flash -----
+    std::cout << "[1e] tape reverse recovery" << std::endl;
+    {
+        skf::RollingBuffer rb;
+        rb.prepare (1000.0, 2, 1.0);
+        juce::AudioBuffer<float> ramp (2, 64);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < ramp.getNumSamples(); ++i)
+                ramp.setSample (ch, i, (float) i / 64.0f);
+        rb.push (ramp);
+
+        skf::RepeatParams a;
+        a.repeats = 1;
+        a.sliceMinS = a.sliceMaxS = 0.020;
+        a.flavor = 2;
+        a.tapeReverse = false;
+
+        skf::RepeatParams b = a;
+        b.tapeReverse = true;
+
+        skf::RepeatVoice forward, reverse;
+        const auto start = rb.now() - 24;
+        forward.start (start, a, skf::TAPEDO, 1000.0);
+        reverse.start (start, b, skf::TAPEDO, 1000.0);
+
+        float fL = 0.0f, fR = 0.0f, rL = 0.0f, rR = 0.0f;
+        for (int i = 0; i < 18; ++i)
+        {
+            fL = fR = rL = rR = 0.0f;
+            forward.render (rb, &fL, &fR);
+            reverse.render (rb, &rL, &rR);
+        }
+
+        check (std::abs (fL - rL) > 1.0e-4f || std::abs (fR - rR) > 1.0e-4f,
+               "TAPE DROPOUT reverse recovery changes the audio path");
+    }
+
     // ---- 2. each engine alone, then all together ---------------------------
     std::cout << "[2] engines" << std::endl;
     {
@@ -278,14 +338,24 @@ int main()
         check (! p->isGateOpen(), "gate starts closed");
         check (runBlocks (*p, 16, 512, r), "silence path with the gate closed");
 
+        auto* mixParam = p->apvts.getParameter ("mix");
+        mixParam->setValueNotifyingHost (0.23f);
+        const float baseMix = mixParam->getValue();
+
         p->setManualTrigger (true);
         check (p->isGateOpen(), "TRIGGER opens the gate");
+        check (std::abs (mixParam->getValue() - baseMix) < 1.0e-6f,
+               "TRIGGER does not overwrite the automatable MIX value");
         check (runBlocks (*p, 24, 512, r), "audio with TRIGGER held");
         p->setManualTrigger (false);
         check (! p->isGateOpen(), "releasing TRIGGER closes the gate");
+        check (std::abs (mixParam->getValue() - baseMix) < 1.0e-6f,
+               "TRIGGER release leaves MIX unchanged");
 
         p->engageRandomTrigger();
         check (p->isRandomTriggerEngaged(), "RANDOM TRIGGER engages");
+        check (std::abs (mixParam->getValue() - baseMix) < 1.0e-6f,
+               "RANDOM TRIGGER does not overwrite MIX");
         check (runBlocks (*p, 24, 512, r), "audio with RANDOM TRIGGER held");
         p->releaseRandomTrigger();
         check (! p->isGateOpen(), "releasing RANDOM TRIGGER closes the gate");
@@ -312,6 +382,79 @@ int main()
             p->setOverlayHeld (ov, false);
 
         p->setManualTrigger (false);
+    }
+
+    // ---- 5b. bypass must not leave MIDI performance state stuck ------------
+    std::cout << "[5b] bypass MIDI state" << std::endl;
+    {
+        p->resetAllToDefaults();
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer midi;
+
+        fillNoise (buf, r);
+        midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        p->processBlock (buf, midi);
+        check (p->isGateOpen(), "MIDI note opens gate before bypass");
+
+        p->apvts.getParameter ("bypass")->setValueNotifyingHost (1.0f);
+        fillNoise (buf, r);
+        midi.clear();
+        midi.addEvent (juce::MidiMessage::noteOff (1, 60), 0);
+        p->processBlock (buf, midi);
+        check (! p->isGateOpen(), "bypass clears held MIDI performance state");
+
+        p->apvts.getParameter ("bypass")->setValueNotifyingHost (0.0f);
+        fillNoise (buf, r);
+        midi.clear();
+        p->processBlock (buf, midi);
+        check (! p->isGateOpen(), "unbypass does not resurrect a released MIDI key");
+        check (bufferIsSane (buf), "audio remains sane after bypass MIDI release");
+    }
+
+    // ---- 5c. a steep ascending pitch step over a 32-slice held loop --------
+    std::cout << "[5c] runaway pitch rate" << std::endl;
+    {
+        p->resetAllToDefaults();
+        auto setNative = [&] (const char* id, float v)
+        { auto* q = p->apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        setNative ("pitchMode", 1.0f);       // Ascending
+        setNative ("pitchPerSkip", 12.0f);   // an octave per repeat
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 72, (juce::uint8) 100), 0);   // CD SKIP, 32 slices
+        bool sane = true;
+        for (int b = 0; b < 1500; ++b)
+        {
+            fillNoise (buf, r);
+            p->processBlock (buf, midi);
+            midi.clear();
+            sane = sane && bufferIsSane (buf);
+        }
+        check (sane, "ascending +12 st held loop stays sane");
+        midi.addEvent (juce::MidiMessage::noteOff (1, 72), 0);
+        p->processBlock (buf, midi);
+    }
+
+    // ---- 5d. Density adds grid skips during a TRIGGER hold ----------------
+    std::cout << "[5d] density" << std::endl;
+    {
+        auto firesWithDensity = [&] (float d)
+        {
+            p->resetAllToDefaults();
+            p->apvts.getParameter ("density")->setValueNotifyingHost (d);
+            juce::AudioBuffer<float> buf (2, 512);
+            juce::MidiBuffer midi;
+            const int before = p->getRecordedEventCount();
+            p->setManualTrigger (true);
+            for (int b = 0; b < 400; ++b) { fillNoise (buf, r); p->processBlock (buf, midi); }
+            p->setManualTrigger (false);
+            p->processBlock (buf, midi);
+            return p->getRecordedEventCount() - before;
+        };
+        const int lo = firesWithDensity (0.0f);
+        const int hi = firesWithDensity (1.0f);
+        check (hi > lo, "Density 1 fires more skips than Density 0 during a hold ("
+                          + juce::String (lo) + " vs " + juce::String (hi) + ")");
     }
 
     // ---- 6. polyphony: stacked held keys -----------------------------------
@@ -392,6 +535,9 @@ int main()
         }
 
         check (sane, "40 consecutive DICE presses stay finite");
+        check (p->apvts.getParameter ("playMode") != nullptr
+                   && p->apvts.getParameter ("motion") != nullptr,
+               "DICE-capable state includes playback style and motion controls");
 
         // the hidden effect must not be exposed by randomising
         auto* ruin = p->apvts.getParameter ("ruinOn");
@@ -470,6 +616,15 @@ int main()
         check (p->getMappedCcFor ("mix") == 74, "the CC is mapped to the parameter");
         check (bufferIsSane (buf), "audio is sane through a learn");
 
+        // a learned CC is applied off the audio thread, coalesced to its latest value
+        juce::MidiBuffer cc;
+        cc.addEvent (juce::MidiMessage::controllerEvent (1, 74, 127), 0);
+        cc.addEvent (juce::MidiMessage::controllerEvent (1, 74, 0), 10);
+        p->processBlock (buf, cc);
+        p->flushPendingMidiCC();
+        auto* mixParam = p->apvts.getParameter ("mix");
+        check (mixParam != nullptr && mixParam->getValue() < 0.01f, "learned CC drives its parameter (latest value wins)");
+
         p->clearMidiMapping ("mix");
         check (p->getMappedCcFor ("mix") < 0, "mapping clears");
     }
@@ -511,7 +666,7 @@ int main()
 
         // the brand strings come from CMake; make sure they actually reach the
         // generated text rather than merely compiling
-        check (report.contains (SKIPFIEND_SUPPORT_EMAIL),
+        check (report.contains (SKIPFIEND_SUPPORT_CONTACT),
                "report carries the support address from CMake");
         check (report.contains (SKIPFIEND_HOMEPAGE),
                "report carries the homepage from CMake");
@@ -538,7 +693,18 @@ int main()
                            .getChildFile ("nope.txt")),
                    "a .txt is rejected");
 
+            // Loading source material must not wipe the sound the user just designed.
+            if (auto* motion = p->apvts.getParameter ("motion"))
+                motion->setValueNotifyingHost (0.91f);
+            if (auto* mode = p->apvts.getParameter ("playMode"))
+                mode->setValueNotifyingHost (mode->convertTo0to1 (5.0f));
+            const float motionBeforeLoad = p->apvts.getParameter ("motion")->getValue();
+            const float modeBeforeLoad = p->apvts.getParameter ("playMode")->getValue();
+
             p->loadSampleFile (wav);
+            check (std::abs (p->apvts.getParameter ("motion")->getValue() - motionBeforeLoad) < 1.0e-6f
+                       && std::abs (p->apvts.getParameter ("playMode")->getValue() - modeBeforeLoad) < 1.0e-6f,
+                   "loading a sample preserves the current effect design");
             check (p->isSampleLoaded(), "sample loads");
             check (p->getSampleName().isNotEmpty(), "sample reports a name");
             check (p->getSampleLengthSeconds() > 0.0, "sample reports a length");
@@ -643,6 +809,50 @@ int main()
             // and the whole thing again, which must still restore cleanly
             p->setStateInformation (good.getData(), (int) good.getSize());
             check (runBlocks (*p, 6, 512, r, 60), "full state after truncated ones");
+        }
+
+        // valid JUCE binary XML with the wrong root type must be ignored
+        {
+            const auto beforeWrongRoot = stateToString (*p);
+            juce::ValueTree wrong ("NOT_PARAMS");
+            wrong.setProperty ("garbage", 123, nullptr);
+            juce::MemoryBlock wrongBlob;
+            if (auto xml = wrong.createXml())
+                juce::AudioProcessor::copyXmlToBinary (*xml, wrongBlob);
+            p->setStateInformation (wrongBlob.getData(), (int) wrongBlob.getSize());
+            check (stateToString (*p) == beforeWrongRoot,
+                   "state restore rejects a valid blob with the wrong root type");
+        }
+
+        // A forged mapping count must be bounded; only 128 MIDI CCs exist.
+        {
+            auto state = p->apvts.copyState();
+            auto midiTree = juce::ValueTree ("MIDILEARN");
+            midiTree.setProperty ("count", 1000000000, nullptr);
+            midiTree.setProperty ("cc0", 7, nullptr);
+            midiTree.setProperty ("id0", "mix", nullptr);
+            state.appendChild (midiTree, nullptr);
+            juce::MemoryBlock hostileMidi;
+            if (auto xml = state.createXml())
+                juce::AudioProcessor::copyXmlToBinary (*xml, hostileMidi);
+            p->setStateInformation (hostileMidi.getData(), (int) hostileMidi.getSize());
+            check (p->getMappedCcFor ("mix") == 7,
+                   "hostile MIDI mapping count is bounded and valid mappings still load");
+        }
+
+        // structurally valid state with hostile sequencer values
+        {
+            p->seqEngine[0].store (999);
+            p->seqRepeats[0].store (999999);
+            juce::MemoryBlock hostile;
+            p->getStateInformation (hostile);
+            p->seqEngine[0].store (-1);
+            p->seqRepeats[0].store (8);
+            p->setStateInformation (hostile.getData(), (int) hostile.getSize());
+            check (p->seqEngine[0].load() >= -1 && p->seqEngine[0].load() < skf::NUM_ENGINES,
+                   "state load clamps sequencer engine IDs");
+            check (p->seqRepeats[0].load() >= 1 && p->seqRepeats[0].load() <= 128,
+                   "state load clamps sequencer repeat counts");
         }
 
         // zero-length state
@@ -826,6 +1036,75 @@ int main()
 
         check (p->getBusCount (true) >= 1, "at least one input bus");
         check (p->getBusCount (false) >= 1, "at least one output bus");
+
+        // A real sidechain signal must survive the process-buffer housekeeping
+        // and reach the transient detector.
+        {
+            juce::AudioProcessor::BusesLayout withSc;
+            withSc.inputBuses.add (Set::stereo());
+            withSc.inputBuses.add (Set::mono());
+            withSc.outputBuses.add (Set::stereo());
+
+            const bool applied = p->setBusesLayout (withSc);
+            check (applied, "stereo + mono sidechain layout can be applied");
+
+            if (applied)
+            {
+                p->prepareToPlay (48000.0, 512);
+                p->resetAllToDefaults();
+                p->apvts.getParameter ("scTrigger")->setValueNotifyingHost (1.0f);
+                if (auto* th = p->apvts.getParameter ("scThresh"))
+                    th->setValueNotifyingHost (th->convertTo0to1 (-50.0f));
+                p->setManualTrigger (true);
+                p->lastEngineFired.store (-1);
+
+                juce::AudioBuffer<float> scBuffer (3, 512);
+                scBuffer.clear();
+                scBuffer.setSample (2, 64, 1.0f);
+                scBuffer.setSample (2, 65, 0.8f);
+                juce::MidiBuffer midi;
+                p->processBlock (scBuffer, midi);
+
+                check (p->lastEngineFired.load() >= 0,
+                       "sidechain transient reaches the detector and fires an engine");
+                check (bufferIsSane (scBuffer), "sidechain processing stays finite");
+                p->setManualTrigger (false);
+                p->resetAllToDefaults();
+            }
+        }
+
+        // Stereo sidechain detection must inspect both channels.
+        {
+            juce::AudioProcessor::BusesLayout withStereoSc;
+            withStereoSc.inputBuses.add (Set::stereo());
+            withStereoSc.inputBuses.add (Set::stereo());
+            withStereoSc.outputBuses.add (Set::stereo());
+
+            const bool applied = p->setBusesLayout (withStereoSc);
+            check (applied, "stereo + stereo sidechain layout can be applied");
+
+            if (applied)
+            {
+                p->prepareToPlay (48000.0, 512);
+                p->resetAllToDefaults();
+                p->apvts.getParameter ("scTrigger")->setValueNotifyingHost (1.0f);
+                if (auto* th = p->apvts.getParameter ("scThresh"))
+                    th->setValueNotifyingHost (th->convertTo0to1 (-50.0f));
+                p->setManualTrigger (true);
+                p->lastEngineFired.store (-1);
+
+                juce::AudioBuffer<float> scBuffer (4, 512);
+                scBuffer.clear();
+                scBuffer.setSample (3, 80, 1.0f); // right sidechain channel only
+                juce::MidiBuffer midi;
+                p->processBlock (scBuffer, midi);
+
+                check (p->lastEngineFired.load() >= 0,
+                       "right-only stereo sidechain transient fires an engine");
+                p->setManualTrigger (false);
+                p->resetAllToDefaults();
+            }
+        }
 
         // Actually negotiate mono and run it - the layout least likely to have
         // been exercised by hand.
