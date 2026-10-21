@@ -149,3 +149,8 @@ See [ELI5: What SKIPFIEND does](ELI5.md) for a simple explanation of the effect.
 ## Required shared plug-in standard
 
 This project follows the [Circuit Drift Labs Shared Audio Plugin Standard](docs/standards/CDL_PLUGIN_BASELINE.md). It is required for the plug-in target; standalone-only requirements apply only when a standalone target is included. The [product-specific specification](docs/SKIPFIEND_PRODUCT_SPEC.md) supplements the shared standard and records the applicable profiles, compliance status, and any exceptions.
+
+## Support this project
+Built by Circuit Drift Labs. More tools and plugins: https://djshellshoxxx.github.io/circuitdriftlabs/
+I make these solo and release them free. If one saved you time, a Monero donation helps cover dev time and hosting.
+<!-- XMR-ADDRESS -->
