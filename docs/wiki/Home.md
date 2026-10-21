@@ -30,3 +30,8 @@ SKIPFIEND is a VST3 / CLAP / Standalone glitch and skip effect from Circuit Drif
 **Also in the repo**
 - README.md and MANUAL.md at the repo root (the in-plugin Help text is a separate copy embedded in `Source/PluginEditor.cpp`)
 - docs/SKIPFIEND_PRODUCT_SPEC.md for the product spec
+
+## Support this project
+Built by Circuit Drift Labs. More tools and plugins: https://djshellshoxxx.github.io/circuitdriftlabs/
+I make these solo and release them free. If one saved you time, a Monero donation helps cover dev time and hosting.
+<!-- XMR-ADDRESS -->

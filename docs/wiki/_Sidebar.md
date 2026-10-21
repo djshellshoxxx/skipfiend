@@ -14,3 +14,7 @@
 - [[Developer-Conventions]]
 - [[Architecture-and-Real-Time-Design]]
 - [[Developer-Guide]]
+
+**Support this project**
+
+- [Circuit Drift Labs](https://djshellshoxxx.github.io/circuitdriftlabs/)
