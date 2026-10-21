@@ -138,6 +138,10 @@ The supported shipping targets are VST3, CLAP and Standalone. CLAP is built from
 
 Prebuilt Windows (standalone `.exe`, VST3, CLAP) and Linux (standalone, VST3, CLAP) binaries are attached to each [GitHub Release](https://github.com/djshellshoxxx/skipfiend/releases). The `Release` workflow builds, tests and publishes them whenever the version in `CMakeLists.txt` changes on `main`, or on a `v*` tag.
 
+## Project wiki
+
+See the [SKIPFIEND Wiki](docs/wiki/Home.md) for user workflows, feature details, developer setup, architecture, and troubleshooting.
+
 ## Plain-language overview
 
 See [ELI5: What SKIPFIEND does](ELI5.md) for a simple explanation of the effect.
