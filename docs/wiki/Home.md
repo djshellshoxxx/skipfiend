@@ -1,25 +1,32 @@
 # SKIPFIEND Wiki
 
-SKIPFIEND is a performance-gated audio effect that turns recent audio into deliberate playback failures: skips, stuck grooves, stutters, buffer underruns, tape dropouts, corruption textures, and tempo-synced repeat gestures.
+SKIPFIEND is a VST3 / CLAP / Standalone glitch and skip effect from Circuit Drift Labs. It fakes the failures you get from a scratched CD, a stuttering stream, a corrupt MP3 frame, a sticky groove or a dying tape deck, and it does it in time with your track.
 
-The effect buffers recent input and uses a trigger to replay and reshape slices of it. It does not damage or rewrite the source audio. It can run as a VST3 or CLAP effect, or in the JUCE Standalone companion.
+**Who it is for:** producers and DJs who want rhythmic skips and stutters that lock to the grid, and developers who want to know how the engine is put together.
 
-## Start here
+## Quick start
 
-- [User Guide](User-Guide.md): route audio through SKIPFIEND, trigger it, shape a sound, and save or export results.
-- [Feature Reference](Feature-Reference.md): the nine failure engines, Repeat Engine, sequencer, MIDI, sidechain, overlays, and output tools.
-- [Developer Guide](Developer-Guide.md): configure, build, test, and navigate the source.
-- [Architecture and Real-Time Design](Architecture-and-Real-Time-Design.md): audio flow, state, and real-time constraints.
-- [Troubleshooting and Validation](Troubleshooting-and-Validation.md): common setup issues, known modeling limits, and validation status.
+1. Build or install the plugin (see [[Developer-Build-and-Test]] if you are building it yourself).
+2. Load SKIPFIEND on a track or bus, with a clip or a loop playing through it.
+3. Hold the **TRIGGER** button, or hold a MIDI key, and let it fire.
+4. Set **SKIP DENSITY** for how often it happens and **MIX** for how much of it you hear.
+5. Read [[User-Guide]] for the rest.
 
-## The core idea
+## Pages
 
-SKIPFIEND treats a rolling buffer as a playback medium that can be bumped, scratched, stalled, or decoded incorrectly. Nine parallel engines model different failure characters. A shared Repeat Engine controls slice length, pitch, timewarp, envelope, stereo motion, playback style, and how each burst ends.
+**For users**
+- [[User-Guide]]: install, every control, workflows, FAQ
+- [[Feature-Reference]]: feature list in more detail
+- [[Troubleshooting-and-Validation]]: when things go wrong
 
-It is designed for hands-on performance. The main effect runs only while a performance gate is open, such as while a MIDI key or Trigger control is held or latched. Tempo/grid, density, chaos, sequencer, and sidechain settings shape what happens during that performance.
+**For developers**
+- [[Developer-Overview]]: architecture, design decisions, signal flow
+- [[Developer-Code-Map]]: where everything lives and where to edit what
+- [[Developer-Build-and-Test]]: toolchain, build, tests, CI, release
+- [[Developer-Conventions]]: style, real-time rules, gotchas, TODOs
+- [[Architecture-and-Real-Time-Design]]: earlier notes on the real-time design
+- [[Developer-Guide]]: earlier developer notes
 
-## Project status and supported targets
-
-The repository documents VST3, CLAP, and Standalone as the current shipping formats. The README describes the implementation as feature-complete against the SKIPFIEND product specification. Automated headless tests and Linux CI are documented; real-host/pluginval validation remains an external release-validation step.
-
-See the [README](../../README.md), [product specification](../SKIPFIEND_PRODUCT_SPEC.md), current [GitHub Releases](https://github.com/djshellshoxxx/skipfiend/releases), and [Actions](https://github.com/djshellshoxxx/skipfiend/actions) for current build and validation status.
+**Also in the repo**
+- README.md and MANUAL.md at the repo root (the in-plugin Help text is a separate copy embedded in `Source/PluginEditor.cpp`)
+- docs/SKIPFIEND_PRODUCT_SPEC.md for the product spec

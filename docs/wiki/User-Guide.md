@@ -1,60 +1,147 @@
 # User Guide
 
-For the full control-by-control instructions, open [MANUAL.md](../../MANUAL.md) or press **Help** inside the plugin.
+## What it does
 
-## Get audio into the effect
+SKIPFIEND sits on your audio and chops it up the way a broken playback system would. You pick a "failure" (called an engine), it fires on the beat, and it repeats a slice of whatever just played. Nothing happens on its own. The effect only runs while you hold something down, which keeps it from wrecking a mix by accident.
 
-SKIPFIEND is an insert effect. In a DAW, put it on an audio track or bus and make sure audio is reaching that channel. It accepts matching mono or stereo main input/output layouts and has an optional mono or stereo sidechain input.
+## Install
 
-To audition without a DAW, use the sample deck below the waveform display:
+Grab the release for your system from the GitHub Releases page. Windows and Linux builds are published. Builds are unsigned, so Windows SmartScreen may ask you to confirm the first launch.
 
-1. Drag in a supported audio file or click **LOAD**.
-2. Loading starts the sample transport and enables **USE SAMPLE**.
-3. Use **PLAY / LOOP** and the sample-level control to audition it.
-4. Turn **USE SAMPLE** off to return to the host/live input.
+- **Windows standalone**: run `SKIPFIEND-<version>-Windows-x64.exe`. No install needed.
+- **Windows plugin**: copy `SKIPFIEND.vst3` to `C:\Program Files\Common Files\VST3\` and `SKIPFIEND.clap` to `C:\Program Files\Common Files\CLAP\`.
+- **Linux**: unpack the `.tar.gz`. Copy `SKIPFIEND.vst3` to `~/.vst3/` and `SKIPFIEND.clap` to `~/.clap/`. Run `./SKIPFIEND` for the standalone.
 
-The sample deck is a testing convenience. Loaded sample media is not saved into a project or preset. The repository includes `03.wav` for testing.
+If a host does not see it after install, rescan plugins.
 
-## Trigger the effect
+To build it yourself, see [[Developer-Build-and-Test]].
 
-Nothing fires automatically. Open the performance gate by holding a MIDI key or the **TRIGGER** control. **RANDOM TRIGGER** does the same with a newly randomized engine character. If **LATCH** is enabled, the trigger controls toggle on/off per click.
+## First run
 
-- White MIDI keys select deterministic failure engines.
-- Black keys select randomized failures.
-- Octave selects a cycle subdivision (1x, 4x, 8x, 16x, or 32x).
-- Multiple held keys can layer voices within the available voice pool.
-- Releasing the final held MIDI key restores the previous dry/wet setting.
+1. Put SKIPFIEND on a track with audio playing through it.
+2. Hold **TRIGGER**. You should hear skips at full wet while it is held.
+3. Let go. It stops.
+4. Turn **SKIP DENSITY** up to get more of them, and **MIX** to blend in the dry signal.
 
-Trigger starts are quantized to the active rhythmic grid. **SYNC** follows a valid host tempo; otherwise set **BPM** manually or use **TAP**. The tempo indicator shows whether the active tempo comes from the host or manual control.
+## How triggering works
 
-## Shape the performance
+Two ways to make it play:
 
-A useful first pass:
+1. **Hold a MIDI key.** Each key plays one effect for as long as it is held. Hold two or three and you get two or three at once.
+2. **Hold TRIGGER.** Full wet while held.
 
-1. Choose a factory preset or start from Init/Clean.
-2. Set **MIX**, **SKIP DENSITY**, and **CHAOS**. At zero chaos the behavior is more repeatable; higher values introduce variation.
-3. Select **RHYTHMIC GRAVITY** and **SWING** for the timing feel. **GROOVE LOCK** can resolve burst lengths to the grid.
-4. Enable one or two engine types and adjust their Amount and Probability.
-5. Hold Trigger or a MIDI key while listening. Density, Chaos, the Skip Language sequencer, and Sidechain Trigger shape the activity while the gate is open.
-6. Use **ARTIFACTS** for recovery sounds such as seek clicks, buffer hiss, and tape-stop wobble.
-7. Adjust the Repeat Engine for slice size, pitch movement, timewarp, envelope, pan walk, playback style, and end behavior.
+A press waits for the next point on the beat grid, so stacked keys and overlays lock to the tempo. White keys pick a specific engine, black keys pick a random one, and the octave sets the retrigger subdivision (1x, 4x, 8x, 16x or 32x).
 
-The 16-step **Skip Language** sequencer selects an engine (or off) and a repeat count for each cell. When enabled, it supplies the trigger pattern instead of the density/chaos trigger selection.
+## The nine engines
 
-## MIDI and sidechain
+| Engine | What it imitates | Character |
+|---|---|---|
+| CD SKIP | laser slip on a CD | 10 to 200 ms chunk, phase-aligned loop, seek click on recovery |
+| HARD SKIP | scratched disc losing its place | playhead jumps back by 1/16, dotted 8th or a whole bar |
+| STICK | stuck groove or needle in the runout | tiny slice, near-endless loop with slow drift |
+| BUFFER UNDERRUN | streaming rebuffer | 40 to 85 percent of the burst muted, resumes on the tail |
+| MP3 CORRUPT | bad Huffman decode | bitcrush, pre-echo, ringing phantom frequencies |
+| TAPE DROPOUT | damaged tape edge | level sag, wow on recovery, hiss |
+| RATCHET | (none, it is a burst) | 32nd to 128th retrigger burst, ascending pitch, accelerating |
+| GATE STUTTER | (none, it is a gate) | hard grid-synced gate chop, clicky |
+| RECORD SKIP | needle in a locked groove | one grid unit repeated exactly, no pitch or shaping |
 
-Right-click a control for MIDI Learn, clear mapping, reset, or exact value entry. Learned mappings are saved with state. The sidechain bus can trigger skips from transients while the main input supplies the audio being processed; enable the sidechain input in the host and set its threshold.
+Each engine has **On**, **Amount** and **Probability**. When a trigger fires, it picks among the enabled engines weighted by Amount x Probability.
 
-## Save and export
+## Main controls
 
-- Save/open full user presets with the `.skipfiend` extension.
-- **A/B** stores two snapshots; **A>B** copies one slot to the other.
-- **CAPTURE** writes the current state under `Documents/SKIPFIEND`.
-- **SKIP→MIDI** exports the retrigger pattern as MIDI for reuse in another instrument or sampler.
-- The menu can export recent processed audio as WAV in 16-, 24-, or 32-bit formats.
+- **SKIP DENSITY**: how often it fires, from about once a bar to nearly constant. It is scaled to the grid so finer grids do not run away.
+- **CHAOS**: 0 is fully grid-locked and predictable. Middle values swap engines by probability and drift the repeat settings. High values swap engines freely and re-randomise pitch, timewarp and length on each fire.
+- **Rhythmic Gravity (grid)**: the snap size, 1/4 down to 1/32T. **Swing** pushes the off-steps later.
+- **Groove Lock**: bends the repeat count so each burst ends on the grid, even when chaos is high.
+- **MIX**: blend between dry and wet.
+- **TRIGGER**: manual full-wet trigger, held while pressed.
+- **BYPASS**: turns the effect off completely.
+- **Loop / grid length**: 32 bars down to a 1/32T slice. The default is 1/16.
+- **Tempo**: follows the host BPM when sync is on. Otherwise set **manualBpm** or tap tempo.
 
-The sample file itself and temporary audio/voice buffers are not embedded in preset state. See the in-product manual for exact export windows, file locations, and settings.
+## Repeat Engine (under every engine)
 
-## Reset and bypass
+Each retrigger has its own settings:
 
-**BYPASS** passes the input through. **RESET** returns parameters to defaults and rejoins real time if the buffer playhead has accumulated performance lag. Loading a sample does not reset the sound design.
+- **Slice length**: fixed, ramp shorter (hyperstutter), ramp longer, or random within Slice Min and Max (ms).
+- **Pitch / Repeat**: stable, ascending, descending, chromatic or drift. **Pitch Step** is in semitones per repeat. **Base Pitch** sets the starting point.
+- **Timewarp**: -1 slows the burst to about 0.2x, +1 speeds it to 4x. It moves rate, not pitch.
+- **Volume Envelope**: flat, decay, swell, tremolo or ducked.
+- **Pan Walk**: static, alternate, random or widen across the burst.
+- **Playback Style**: classic, stutter edit, ping-pong, scatter, orbit or evolve. This moves playback around (reverses some repeats, jumps to nearby fragments) instead of replaying straight.
+- **Motion** (0 to 100 percent): how strongly the playback style moves. Classic ignores it.
+- **End Behaviour**: hard cut, tail out, glitch click, seek noise, silence or resume.
+
+Some quick recipes:
+- SOPHIE-style ascending burst: Pitch = Ascending, Step around +2.
+- Aphex-style fill: RATCHET plus Decay.
+- Trip-hop tail: Repeats Min and Max both 3, End = Tail Out.
+
+## Skip Language sequencer
+
+The 16 cells at the bottom of the window. Click a cell to cycle which engine fires on that step (or none). Mouse-wheel sets its repeat count. When **SKIP LANGUAGE** is on, the sequencer drives triggering instead of the density and chaos dice.
+
+## Sidechain
+
+Turn on the Sidechain bus. A transient above **SC Threshold** fires a weighted engine on the main signal. Good for a kick or hat driving the skips.
+
+## Overlay FX
+
+Four momentary overlays you can hold: Echo, Delay, Dub and Reverse. They have their own rate controls (echoRate, delayRate, dubRate, revBars). Reverse looks at a bar count (revBars).
+
+## Recovery Artifacts
+
+Adds the sounds that happen between skips: seek click, laser hunt, buffer-fill hiss and tape-stop wobble. Each one follows the engine that just recovered.
+
+## Sample deck
+
+You can load an audio file (WAV, AIFF and similar) and let SKIPFIEND play it instead of the input. You can play or loop it, set its gain, and use the full-track buffer option to keep the whole track in memory.
+
+## MIDI Learn
+
+Right-click any control and choose MIDI learn, then move a knob on your controller. Right-click again to clear the mapping. Options has a "clear all CC mappings" button.
+
+## Presets, A/B and menu
+
+- **MENU** has save, save as, open (`.skipfiend` files), export audio, open the preset folder, Options and About.
+- **Factory presets** are built in. Load them from the preset list.
+- **A/B**: two full snapshots. Switching slots parks the state you left, so A/B always compares two live edits. **A>B** copies one slot over the other.
+- **Export audio** writes WAV at 16, 24 or 32-bit float. You can export the last 8 seconds, the last 30 seconds, or everything buffered.
+- **Options**: tooltips on or off, audio and MIDI device notes, and clearing learned CC mappings.
+
+## Capture and MIDI export
+
+- **CAPTURE** saves the current full state to `~/Documents/SKIPFIEND/capture_*.skipfiend`.
+- **SKIP to MIDI** writes the retrigger pattern to `~/Documents/SKIPFIEND/skips_*.mid`. Each fire is note 36 plus the engine index, so you can drop it into a sampler.
+
+## Right-click menu
+
+Right-click any control for MIDI learn, clear mapping, reset to default, or type an exact value.
+
+## Workflows
+
+**Live DJ use:** keep TRIGGER or a MIDI key on a pad, set Grid to 1/8, and use CHAOS low so it stays on the beat.
+
+**Studio glitch edit:** pick one engine (say CD SKIP), set Density around the middle, put Groove Lock on, and export it from MENU. Use Capture if you want to come back to it.
+
+**Sampler handoff:** run SKIP to MIDI on a pattern you like and load the MIDI into a sampler to rebuild it with real samples.
+
+## Troubleshooting
+
+See [[Troubleshooting-and-Validation]]. The short version:
+
+- No sound while holding TRIGGER: check BYPASS is off, MIX is above zero, and the track has audio going in.
+- Nothing on MIDI keys: check the host is sending MIDI to the track, and that the plugin accepts MIDI input (it does).
+- Skips not on the beat: check the grid, swing, and whether host sync is on.
+- Crash: enable the crash log in Help > Debug. Logs go to `~/Documents/SKIPFIEND/Diagnostics`.
+
+## FAQ
+
+**Does it need the host tempo?** No. Turn sync off and set a BPM by hand or by tapping.
+
+**Why does it only work while I hold something?** By design. There is no automatic triggering, so it cannot fire unless you ask it to.
+
+**Are the engines accurate models?** No. They are functional approximations. MP3 CORRUPT and TAPE DROPOUT in particular are lightweight imitations. The manual says so.
+
+**Where are my presets?** `~/Documents/SKIPFIEND/` (the Help window links there).
