@@ -134,6 +134,10 @@ Automated QA covers DSP extremes, state/preset round-trips, malformed state, MID
 
 The supported shipping targets are VST3, CLAP and Standalone. CLAP is built from the same JUCE processor via [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions) (`-DSKIPFIEND_BUILD_CLAP=OFF` to skip it).
 
+## Verification status
+
+The headless harness and the Linux CI job (`.github/workflows/ci.yml`) are the repository's build and test evidence. This documentation pass did not build the plugin or run `SKIPFIEND_Tests`; the sandbox used for it lacked the X11/JUCE Linux headers needed for a native build. Re-run the commands in **Tests** above on your own machine before relying on a specific build.
+
 ## Downloads
 
 Prebuilt Windows (standalone `.exe`, VST3, CLAP) and Linux (standalone, VST3, CLAP) binaries are attached to each [GitHub Release](https://github.com/djshellshoxxx/skipfiend/releases). The `Release` workflow builds, tests and publishes them whenever the version in `CMakeLists.txt` changes on `main`, or on a `v*` tag.
